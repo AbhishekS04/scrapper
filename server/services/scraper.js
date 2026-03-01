@@ -62,15 +62,42 @@ function needsJSRendering(html) {
     '__vue_app__', '__NUXT__', 'ng-version', 'ng-app',
     '<div id="root"></div>', '<div id="app"></div>',
     '<noscript>You need to enable JavaScript',
+    'data-reactid', 'react-app', 'vite/client',
+    'next/static', '_next/', 'gatsby-', '__gatsby',
+    'svelte-', '__sveltekit', 'astro-island',
   ];
   const lower = html.toLowerCase();
-  const bodyContent = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  if (bodyContent) {
-    const bodyText = bodyContent[1].replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, '').trim();
-    if (bodyText.length < 100 && indicators.some(ind => lower.includes(ind.toLowerCase()))) {
+
+  // Strong indicator: framework markers present
+  const hasFrameworkMarker = indicators.some(ind => lower.includes(ind.toLowerCase()));
+
+  if (hasFrameworkMarker) {
+    // Extract body text (strip scripts, styles, tags)
+    const bodyContent = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    if (bodyContent) {
+      const bodyText = bodyContent[1]
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+      // If body has less than 500 chars of real text with a framework marker,
+      // it's very likely a JS-rendered SPA
+      if (bodyText.length < 500) return true;
+    } else {
+      // No body tag found but has framework markers
       return true;
     }
   }
+
+  // Check for empty div containers that are typically SPA mount points
+  const emptyAppDiv = /<div\s+id=["'](root|app|__next|__nuxt|main)["']\s*>\s*<\/div>/i;
+  if (emptyAppDiv.test(html)) return true;
+
+  // Check: very few <img> tags but lots of <script> tags → probably JS-rendered
+  const imgCount = (html.match(/<img[\s>]/gi) || []).length;
+  const scriptCount = (html.match(/<script[\s>]/gi) || []).length;
+  if (imgCount < 2 && scriptCount > 5 && hasFrameworkMarker) return true;
+
   return false;
 }
 
@@ -124,7 +151,7 @@ async function checkPlaywright() {
 /**
  * Fetch page with Playwright (for JS-rendered pages)
  */
-async function fetchWithPlaywright(url, timeout = 30000) {
+async function fetchWithPlaywright(url, timeout = 45000) {
   const available = await checkPlaywright();
   if (!available) throw new Error('Playwright not available in this environment');
 
@@ -147,7 +174,20 @@ async function fetchWithPlaywright(url, timeout = 30000) {
       timeout,
     });
 
-    // Wait a bit for dynamic content
+    // Wait for dynamic content to render
+    await page.waitForTimeout(3000);
+
+    // Scroll down to trigger lazy-loaded images
+    await page.evaluate(async () => {
+      const delay = (ms) => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < 3; i++) {
+        window.scrollBy(0, window.innerHeight);
+        await delay(500);
+      }
+      window.scrollTo(0, 0);
+    });
+
+    // Wait for any lazy images to load
     await page.waitForTimeout(2000);
 
     const html = await page.content();
@@ -182,6 +222,23 @@ async function smartFetch(url, forcePlaywright = false) {
       } catch {
         // Fallback to Axios result if Playwright fails
         return result;
+      }
+    }
+
+    // Also check: if Axios result has very few images and content looks thin,
+    // try Playwright as well
+    if (typeof result.html === 'string') {
+      const imgCount = (result.html.match(/<img[\s>]/gi) || []).length;
+      const bodyText = result.html.replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, '').trim();
+      // Very few images and short body text — likely SPA
+      if (imgCount <= 2 && bodyText.length < 300) {
+        try {
+          return await fetchWithPlaywright(url);
+        } catch {
+          return result;
+        }
       }
     }
 
@@ -339,6 +396,7 @@ export async function startScrapeJob(jobId, url, options = {}) {
           downloads: pageData.downloads || [],
           videos: pageData.videos || [],
           suggestions: pageData.suggestions || [],
+          contactInfo: pageData.contactInfo || {},
         });
 
         pagesScraped++;

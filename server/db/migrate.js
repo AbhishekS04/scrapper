@@ -78,7 +78,7 @@ async function migrate() {
     // Add advanced columns if they don't exist
     const advancedCols = [
       'scripts', 'stylesheets', 'comments', 'leaked_data', 'security_info',
-      'hidden_fields', 'iframes', 'downloads', 'videos', 'suggestions'
+      'hidden_fields', 'iframes', 'downloads', 'videos', 'suggestions', 'contact_info'
     ];
     for (const col of advancedCols) {
       const defaultVal = ['leaked_data', 'security_info'].includes(col) ? "'{}'" : "'[]'";

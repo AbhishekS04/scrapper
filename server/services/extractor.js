@@ -24,6 +24,7 @@ export function extractPageData(html, pageUrl, headers = {}) {
     emails: extractEmails($, html),
     phones: extractPhones($, html),
     socialLinks: extractSocialLinks($, html),
+    contactInfo: extractContactInfo($, html),
     metadata: extractMetadata($, pageUrl),
     techStack: detectTechStack(html, headers),
     tablesData: extractTables($),
@@ -116,17 +117,28 @@ function extractImages($, baseUrl) {
   const seen = new Set();
 
   const addImage = (src, alt, width, height, source) => {
-    if (!src || src.startsWith('data:image/svg') && src.length < 200) return; // skip tiny inline SVGs
+    if (!src) return;
+    // Skip tiny inline SVGs (but keep larger ones)
+    if (src.startsWith('data:image/svg') && src.length < 200) return;
+    // Skip tiny base64 placeholders (1x1 gif, transparent png)
+    if (src.startsWith('data:image/gif;base64,R0lGOD')) return;
+    if (src.startsWith('data:image/png;base64,iVBOR') && src.length < 200) return;
+
     let absoluteSrc;
     try {
       absoluteSrc = new URL(src, baseUrl.origin).href;
     } catch {
       absoluteSrc = src;
     }
+
     // Skip tracking pixels and tiny spacers
-    if (absoluteSrc.includes('1x1') || absoluteSrc.includes('pixel') || absoluteSrc.includes('spacer')) return;
+    if (absoluteSrc.includes('1x1') || absoluteSrc.includes('pixel.') || absoluteSrc.includes('/spacer.')) return;
+    // Skip common tracking/analytics images
+    if (absoluteSrc.includes('facebook.com/tr') || absoluteSrc.includes('google-analytics.com') || absoluteSrc.includes('doubleclick.net')) return;
+
     if (seen.has(absoluteSrc)) return;
     seen.add(absoluteSrc);
+
     images.push({
       src: absoluteSrc,
       alt: alt || null,
@@ -136,28 +148,43 @@ function extractImages($, baseUrl) {
     });
   };
 
-  // 1. Standard <img> tags — check multiple src attributes
+  // 1. Standard <img> tags — check multiple src attributes (handles lazy loading)
   const lazyAttrs = ['src', 'data-src', 'data-lazy-src', 'data-original', 'data-image',
-    'data-bg', 'data-lazy', 'data-srcset', 'data-fallback-src', 'data-hi-res-src'];
+    'data-bg', 'data-lazy', 'data-fallback-src', 'data-hi-res-src',
+    'data-nimg', 'data-ll-status'];
 
   $('img').each((_, el) => {
     const alt = $(el).attr('alt')?.trim();
     const width = $(el).attr('width');
     const height = $(el).attr('height');
+    let found = false;
 
     // Try each src attribute
     for (const attr of lazyAttrs) {
       const val = $(el).attr(attr);
-      if (val && !val.startsWith('data:image/gif') && !val.startsWith('data:image/png;base64,iVBOR') && val.length < 5) {
-        // skip tiny base64 placeholders
-      }
-      if (val && val.length > 5) {
+      if (val && val.length > 5 && !val.startsWith('data:image/gif;base64,R0lGOD') && !(val.startsWith('data:') && val.length < 200)) {
         addImage(val, alt, width, height, 'img');
-        break; // use first valid src found
+        found = true;
+        break;
       }
     }
 
-    // Also parse srcset for high-res images
+    // If no standard src found, check srcset as fallback
+    if (!found) {
+      const srcset = $(el).attr('srcset');
+      if (srcset) {
+        // Take the highest resolution image from srcset
+        const parts = srcset.split(',').map(s => s.trim());
+        const bestPart = parts[parts.length - 1]; // last is usually highest res
+        const url = bestPart?.split(/\s+/)[0];
+        if (url && url.length > 5) {
+          addImage(url, alt, width, height, 'srcset');
+          found = true;
+        }
+      }
+    }
+
+    // Also add all srcset variants as separate images
     const srcset = $(el).attr('srcset');
     if (srcset) {
       const parts = srcset.split(',');
@@ -188,9 +215,13 @@ function extractImages($, baseUrl) {
   $('[style]').each((_, el) => {
     const style = $(el).attr('style');
     if (!style) return;
-    const bgMatch = style.match(/background(?:-image)?\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
-    if (bgMatch && bgMatch[1] && bgMatch[1].length > 5 && !bgMatch[1].startsWith('data:')) {
-      addImage(bgMatch[1], null, null, null, 'css-bg');
+    // Match all url() in style (could have multiple backgrounds)
+    const bgRegex = /url\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+    let match;
+    while ((match = bgRegex.exec(style)) !== null) {
+      if (match[1] && match[1].length > 5 && !match[1].startsWith('data:')) {
+        addImage(match[1], null, null, null, 'css-bg');
+      }
     }
   });
 
@@ -201,10 +232,7 @@ function extractImages($, baseUrl) {
   const twitterImage = $('meta[name="twitter:image"]').attr('content');
   if (twitterImage) addImage(twitterImage, 'Twitter Card Image', null, null, 'twitter:image');
 
-  // 5. SVG images (external via <img src="*.svg"> already caught, check <svg> with meaningful content)
-  // Skip — inline SVGs are usually icons, not content images
-
-  // 6. <figure> images that might use non-standard attributes
+  // 5. <figure> images that might use non-standard attributes
   $('figure img, figure [data-src]').each((_, el) => {
     const src = $(el).attr('data-src') || $(el).attr('src');
     if (src) {
@@ -213,23 +241,107 @@ function extractImages($, baseUrl) {
     }
   });
 
-  // 7. Link tags for icons/apple-touch-icon
+  // 6. Link tags for icons/apple-touch-icon (put these last, they're less important)
   $('link[rel*="icon"], link[rel="apple-touch-icon"]').each((_, el) => {
     const href = $(el).attr('href');
     if (href) addImage(href, 'Site Icon', null, null, 'favicon');
   });
+
+  // 7. Next.js Image component — data-nimg attribute or /_next/image paths
+  $('[data-nimg]').each((_, el) => {
+    const src = $(el).attr('src');
+    if (src) addImage(src, $(el).attr('alt')?.trim(), $(el).attr('width'), $(el).attr('height'), 'next-image');
+  });
+
+  // 8. Divs/sections with background-image via class (common in Tailwind/portfolio sites)
+  // Extract from <style> blocks or embedded CSS
+  const styleContent = [];
+  $('style').each((_, el) => {
+    styleContent.push($(el).html() || '');
+  });
+  const allCSS = styleContent.join('\n');
+  const cssUrlRegex = /url\(\s*['"]?([^'")]+\.(?:jpg|jpeg|png|gif|webp|avif|svg)(?:\?[^'")\s]*)?)['"]?\s*\)/gi;
+  let cssMatch;
+  while ((cssMatch = cssUrlRegex.exec(allCSS)) !== null) {
+    if (cssMatch[1] && cssMatch[1].length > 5 && !cssMatch[1].startsWith('data:')) {
+      addImage(cssMatch[1], null, null, null, 'css-embedded');
+    }
+  }
+
+  // 9. Video poster images
+  $('video[poster]').each((_, el) => {
+    const poster = $(el).attr('poster');
+    if (poster) addImage(poster, 'Video Poster', null, null, 'video-poster');
+  });
+
+  // 10. Any element with role="img" (accessibility pattern)
+  $('[role="img"]').each((_, el) => {
+    const style = $(el).attr('style') || '';
+    const bgMatch = style.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
+    if (bgMatch) addImage(bgMatch[1], $(el).attr('aria-label'), null, null, 'role-img');
+  });
+
+  // Sort: put content images first, favicons last
+  const sortOrder = { 'img': 0, 'next-image': 0, 'srcset': 1, 'picture': 1, 'figure': 1, 'css-bg': 2, 'css-embedded': 2, 'role-img': 2, 'video-poster': 2, 'og:image': 3, 'twitter:image': 3, 'favicon': 4 };
+  images.sort((a, b) => (sortOrder[a.source] || 3) - (sortOrder[b.source] || 3));
 
   return images.slice(0, 300);
 }
 
 function extractEmails($, html) {
   const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
-  const text = $('body').text() + ' ' + html;
-  const matches = text.match(emailRegex) || [];
-  return [...new Set(matches)].filter(e =>
+
+  const emails = new Set();
+
+  // 1. From mailto: links (most reliable)
+  $('a[href^="mailto:"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (href) {
+      const email = href.replace('mailto:', '').split('?')[0].trim().toLowerCase();
+      if (email && email.includes('@') && email.includes('.')) {
+        emails.add(email);
+      }
+    }
+  });
+
+  // 2. From visible text (strip scripts/styles first)
+  let visibleText = html;
+  visibleText = visibleText.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  visibleText = visibleText.replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  visibleText = visibleText.replace(/<[^>]+>/g, ' ');
+  visibleText = visibleText.replace(/&nbsp;/g, ' ').replace(/&#64;/g, '@').replace(/&amp;/g, '&');
+  // Also decode common obfuscation: [at] -> @, [dot] -> .
+  visibleText = visibleText.replace(/\s*\[at\]\s*/gi, '@');
+  visibleText = visibleText.replace(/\s*\(at\)\s*/gi, '@');
+  visibleText = visibleText.replace(/\s*\[dot\]\s*/gi, '.');
+  visibleText = visibleText.replace(/\s*\(dot\)\s*/gi, '.');
+
+  const textMatches = visibleText.match(emailRegex) || [];
+  textMatches.forEach(e => emails.add(e.toLowerCase()));
+
+  // 3. From href attributes and data attributes
+  $('[href], [data-email], [data-contact]').each((_, el) => {
+    const val = $(el).attr('href') || $(el).attr('data-email') || $(el).attr('data-contact') || '';
+    const matches = val.match(emailRegex);
+    if (matches) matches.forEach(e => emails.add(e.toLowerCase()));
+  });
+
+  // 4. From JSON-LD structured data
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const text = $(el).html() || '';
+      const matches = text.match(emailRegex);
+      if (matches) matches.forEach(e => emails.add(e.toLowerCase()));
+    } catch {}
+  });
+
+  // Filter out false positives
+  return [...emails].filter(e =>
     !e.endsWith('.png') && !e.endsWith('.jpg') && !e.endsWith('.gif') &&
-    !e.endsWith('.svg') && !e.endsWith('.webp') && !e.includes('example.com') &&
-    !e.includes('sentry')
+    !e.endsWith('.svg') && !e.endsWith('.webp') && !e.endsWith('.css') &&
+    !e.endsWith('.js') && !e.includes('example.com') && !e.includes('sentry') &&
+    !e.includes('webpack') && !e.includes('localhost') &&
+    !e.startsWith('0x') && e.length < 100
   ).slice(0, 100);
 }
 
@@ -338,6 +450,132 @@ function extractSocialLinks($, html) {
   });
 
   return socialLinks;
+}
+
+/**
+ * Extract structured contact information from page
+ * Looks for addresses, names, locations in contact/about sections and structured data
+ */
+function extractContactInfo($, html) {
+  const contact = {
+    addresses: [],
+    names: [],
+    locations: [],
+    websites: [],
+    roles: [],
+    raw: [],
+  };
+
+  // 1. From JSON-LD structured data (most reliable)
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item.name) contact.names.push(item.name);
+        if (item.jobTitle) contact.roles.push(item.jobTitle);
+        if (item.url) contact.websites.push(item.url);
+        if (item.email) contact.raw.push({ type: 'email', value: item.email });
+        if (item.telephone) contact.raw.push({ type: 'phone', value: item.telephone });
+
+        // Address from structured data
+        const addr = item.address;
+        if (addr) {
+          if (typeof addr === 'string') {
+            contact.addresses.push(addr);
+          } else if (addr.streetAddress || addr.addressLocality) {
+            const parts = [addr.streetAddress, addr.addressLocality, addr.addressRegion, addr.postalCode, addr.addressCountry].filter(Boolean);
+            contact.addresses.push(parts.join(', '));
+          }
+        }
+
+        if (item.location) {
+          if (typeof item.location === 'string') contact.locations.push(item.location);
+          else if (item.location.name) contact.locations.push(item.location.name);
+        }
+
+        // Check nested items (e.g., @graph)
+        if (item['@graph'] && Array.isArray(item['@graph'])) {
+          for (const sub of item['@graph']) {
+            if (sub.name && sub['@type']?.match?.(/Person|Organization/i)) contact.names.push(sub.name);
+            if (sub.jobTitle) contact.roles.push(sub.jobTitle);
+            if (sub.email) contact.raw.push({ type: 'email', value: sub.email });
+            if (sub.telephone) contact.raw.push({ type: 'phone', value: sub.telephone });
+          }
+        }
+      }
+    } catch {}
+  });
+
+  // 2. Look for contact sections by common selectors and text patterns
+  const contactSelectors = [
+    '#contact', '#about', '#footer', '.contact', '.about', '.footer',
+    '[data-section="contact"]', '[data-section="about"]',
+    'section:has(h2:contains("Contact"))', 'section:has(h2:contains("About"))',
+    'section:has(h2:contains("Get in Touch"))', 'section:has(h2:contains("Reach"))',
+    'footer', 'address',
+  ];
+
+  for (const selector of contactSelectors) {
+    try {
+      $(selector).each((_, section) => {
+        const text = $(section).text().trim();
+        if (!text || text.length > 5000) return;
+
+        // Look for address patterns in contact sections
+        const addressPatterns = [
+          // US address: 123 Main St, City, ST 12345
+          /\d{1,5}\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Way)[.,]?\s*[A-Za-z\s]+,\s*[A-Z]{2}\s*\d{5}/gi,
+          // City, State pattern
+          /[A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z\s]+,\s*(?:India|USA|UK|Canada|Australia|Germany|France)/gi,
+          // Indian cities with pin codes
+          /[A-Z][a-zA-Z\s]+[-,]\s*\d{6}/g,
+        ];
+
+        for (const pattern of addressPatterns) {
+          const matches = text.match(pattern);
+          if (matches) {
+            matches.forEach(m => {
+              if (m.trim().length > 10 && !contact.addresses.includes(m.trim())) {
+                contact.addresses.push(m.trim());
+              }
+            });
+          }
+        }
+      });
+    } catch {}
+  }
+
+  // 3. From <address> HTML elements
+  $('address').each((_, el) => {
+    const text = $(el).text().trim();
+    if (text && text.length > 5 && text.length < 500) {
+      contact.addresses.push(text);
+    }
+  });
+
+  // 4. Person/author name from meta tags
+  const author = $('meta[name="author"]').attr('content')?.trim();
+  if (author) contact.names.push(author);
+
+  // 5. From vCard hCard microformat
+  $('.vcard, .h-card').each((_, el) => {
+    const fn = $(el).find('.fn, .p-name').text()?.trim();
+    const role = $(el).find('.role, .p-job-title').text()?.trim();
+    const adr = $(el).find('.adr, .p-adr').text()?.trim();
+    if (fn) contact.names.push(fn);
+    if (role) contact.roles.push(role);
+    if (adr) contact.addresses.push(adr);
+  });
+
+  // Deduplicate
+  contact.names = [...new Set(contact.names)].slice(0, 10);
+  contact.addresses = [...new Set(contact.addresses)].slice(0, 10);
+  contact.locations = [...new Set(contact.locations)].slice(0, 10);
+  contact.websites = [...new Set(contact.websites)].slice(0, 10);
+  contact.roles = [...new Set(contact.roles)].slice(0, 10);
+
+  return contact;
 }
 
 function extractMetadata($, pageUrl) {

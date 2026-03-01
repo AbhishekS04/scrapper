@@ -50,6 +50,19 @@ export default function ResultsTabs({ jobData }) {
   const allVideos = results.flatMap(r => r.videos || []);
   const allSuggestions = results.flatMap(r => r.suggestions || []);
 
+  // Aggregate contact info from all pages
+  const allContactInfo = (() => {
+    const contacts = results.map(r => r.contactInfo || r.contact_info || {});
+    return {
+      names: [...new Set(contacts.flatMap(c => c.names || []))],
+      addresses: [...new Set(contacts.flatMap(c => c.addresses || []))],
+      locations: [...new Set(contacts.flatMap(c => c.locations || []))],
+      websites: [...new Set(contacts.flatMap(c => c.websites || []))],
+      roles: [...new Set(contacts.flatMap(c => c.roles || []))],
+      raw: contacts.flatMap(c => c.raw || []),
+    };
+  })();
+
   // Deduplicate suggestions by title
   const uniqueSuggestions = allSuggestions.filter((s, i, arr) =>
     arr.findIndex(x => x.title === s.title) === i
@@ -69,7 +82,7 @@ export default function ResultsTabs({ jobData }) {
       case 'security': return <SecurityTab security={allSecurity} />;
       case 'leaks': return <LeaksTab leaked={allLeaked} />;
       case 'tables': return <TablesTab results={results} />;
-      case 'contacts': return <ContactsTab emails={allEmails} phones={allPhones} social={allSocial} />;
+      case 'contacts': return <ContactsTab emails={allEmails} phones={allPhones} social={allSocial} contactInfo={allContactInfo} />;
       case 'metadata': return <MetadataTab results={results} />;
       case 'tech': return <TechTab results={results} />;
       case 'extras': return <ExtrasTab comments={allComments} hidden={allHidden} iframes={allIframes} downloads={allDownloads} videos={allVideos} />;
@@ -578,9 +591,70 @@ function TablesTab({ results }) {
 }
 
 /* ─── Contacts Tab ────────────────────────────────────────────── */
-function ContactsTab({ emails, phones, social }) {
+function ContactsTab({ emails, phones, social, contactInfo }) {
+  const hasContactInfo = contactInfo && (
+    contactInfo.names?.length > 0 || contactInfo.addresses?.length > 0 ||
+    contactInfo.locations?.length > 0 || contactInfo.roles?.length > 0 ||
+    contactInfo.websites?.length > 0
+  );
+
   return (
     <div className="space-y-6">
+      {/* Person/Company Info Card */}
+      {hasContactInfo && (
+        <div className="bg-gradient-to-r from-white/[0.03] to-transparent border border-white/[0.06] rounded-xl p-5">
+          <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span>👤</span> Contact Details Found
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {contactInfo.names?.length > 0 && (
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Name</span>
+                <div className="text-white font-medium mt-1">
+                  {contactInfo.names.map((n, i) => (
+                    <div key={i}>{n}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {contactInfo.roles?.length > 0 && (
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Role / Title</span>
+                <div className="text-gray-300 mt-1">
+                  {contactInfo.roles.map((r, i) => (
+                    <div key={i}>{r}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {contactInfo.addresses?.length > 0 && (
+              <div className="md:col-span-2">
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Address</span>
+                {contactInfo.addresses.map((a, i) => (
+                  <div key={i} className="text-gray-300 mt-1 text-sm">{a}</div>
+                ))}
+              </div>
+            )}
+            {contactInfo.locations?.length > 0 && (
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Location</span>
+                {contactInfo.locations.map((l, i) => (
+                  <div key={i} className="text-gray-300 mt-1 text-sm">{l}</div>
+                ))}
+              </div>
+            )}
+            {contactInfo.websites?.length > 0 && (
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Website</span>
+                {contactInfo.websites.map((w, i) => (
+                  <a key={i} href={w} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:underline mt-1 text-sm block truncate">{w}</a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Emails */}
       <div>
         <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -647,6 +721,15 @@ function ContactsTab({ emails, phones, social }) {
           </div>
         )}
       </div>
+
+      {/* No contact data at all */}
+      {emails.length === 0 && phones.length === 0 && social.length === 0 && !hasContactInfo && (
+        <div className="text-center py-10 text-gray-500">
+          <div className="text-4xl mb-3">📭</div>
+          <p className="text-sm">No contact information found on the scanned pages.</p>
+          <p className="text-xs text-gray-600 mt-2">Try enabling "Follow Links" or "Deep Scan" to crawl sub-pages like /about or /contact</p>
+        </div>
+      )}
     </div>
   );
 }
