@@ -13,7 +13,7 @@ export default function Home() {
     <div className="min-h-[calc(100vh-4rem)]">
       {/* Hero Section */}
       {showHero && (
-        <div className="relative flex flex-col items-center justify-center pt-20 pb-12 px-6 animate-fade-in">
+        <div className="relative flex flex-col items-center justify-center pt-24 pb-14 px-6 animate-fade-in">
           <div className="relative z-10 flex flex-col items-center">
             {/* Logo badge */}
             <div className="relative mb-8">
@@ -32,7 +32,7 @@ export default function Home() {
             <p className="text-gray-400 text-lg md:text-xl mb-2 text-center max-w-2xl">
               Web intelligence & data extraction platform
             </p>
-            <p className="text-gray-600 text-sm mb-12 text-center max-w-lg">
+            <p className="text-gray-600 text-sm mb-14 text-center max-w-lg">
               Extract links, images, metadata, contacts, tech stack, security headers, scripts, and more.
             </p>
           </div>
@@ -88,8 +88,8 @@ export default function Home() {
 
       {/* Feature cards on hero */}
       {showHero && (
-        <div className="max-w-6xl mx-auto px-6 pb-20 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="max-w-5xl mx-auto px-6 pt-14 pb-24 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
                 icon: '⚡',
@@ -112,16 +112,16 @@ export default function Home() {
                 desc: 'Links, images, scripts, forms, tables, contacts, metadata, tech stack.',
               },
             ].map(card => (
-              <div key={card.title} className="glass-panel-hover p-5 group/card">
-                <div className="text-2xl mb-3 w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04]">{card.icon}</div>
-                <h3 className="text-white font-semibold mb-1.5 text-sm">{card.title}</h3>
+              <div key={card.title} className="glass-panel-hover p-6 group/card">
+                <div className="text-2xl mb-4 w-12 h-12 rounded-xl flex items-center justify-center bg-white/[0.04]">{card.icon}</div>
+                <h3 className="text-white font-semibold mb-2 text-sm">{card.title}</h3>
                 <p className="text-gray-500 text-xs leading-relaxed">{card.desc}</p>
               </div>
             ))}
           </div>
 
           {/* Bottom info bar */}
-          <div className="mt-8 flex items-center justify-center gap-6 text-[11px] text-gray-600">
+          <div className="mt-10 flex items-center justify-center gap-8 text-[11px] text-gray-600">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
               Deep crawling up to 5 levels

@@ -14,7 +14,7 @@ function NavBar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-950/80 backdrop-blur-xl border-b border-white/[0.06]">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between relative">
         <Link to="/" className="flex items-center gap-3 group">
           <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.1] flex items-center justify-center group-hover:border-white/[0.2] transition-all duration-300">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -26,7 +26,8 @@ function NavBar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-1">
+        {/* Center nav links */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1">
           <SignedIn>
             <Link
               to="/"

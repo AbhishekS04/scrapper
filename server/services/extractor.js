@@ -795,6 +795,32 @@ function extractLeakedData($, html) {
 
   const fullText = html;
 
+  // ─── Detect code-hosting sites (GitHub, GitLab, etc.) ──────
+  // On these sites, most "leaked" data is user-generated code content, not real vulnerabilities
+  const pageTitle = $('title').text().toLowerCase();
+  const metaOgSite = $('meta[property="og:site_name"]').attr('content') || '';
+  const isCodeHostingSite = [
+    'github', 'gitlab', 'bitbucket', 'codepen', 'jsfiddle',
+    'codesandbox', 'replit', 'stackblitz', 'gist', 'pastebin',
+    'npmjs', 'pypi', 'stackoverflow', 'stack overflow',
+  ].some(site => pageTitle.includes(site) || metaOgSite.toLowerCase().includes(site));
+
+  // ─── Collect text inside <code>, <pre>, <textarea> elements ──────
+  // Matches found inside these are almost always examples/docs, not real leaks
+  const codeBlockTexts = new Set();
+  $('code, pre, textarea, .highlight, .code-block, [class*="language-"], [class*="CodeMirror"], .blob-code').each((_, el) => {
+    const txt = $(el).text();
+    if (txt.length > 5) codeBlockTexts.add(txt);
+  });
+
+  // Check if a match appears inside a code block
+  const isInsideCodeBlock = (matchStr) => {
+    for (const block of codeBlockTexts) {
+      if (block.includes(matchStr)) return true;
+    }
+    return false;
+  };
+
   // Helper: Check if a match is inside an HTML tag attribute, script src, or common false-positive context
   const isLikelyFalsePositive = (match, text, pos) => {
     // Get surrounding context (100 chars before and after)
@@ -809,6 +835,10 @@ function extractLeakedData($, html) {
       'test', 'sample', 'demo', 'dummy', 'fake', 'xxx',
       'lorem', 'your-', 'your_', '<option', 'id="', "id='",
       'class="', "class='", 'data-', 'aria-',
+      // Additional false-positive context markers
+      'tutorial', 'readme', 'documentation', 'docs',
+      'snippet', 'code-block', 'highlight', 'syntax',
+      '<code', '</code', '<pre', '</pre',
     ];
     return falseContexts.some(ctx => context.includes(ctx));
   };
@@ -840,6 +870,10 @@ function extractLeakedData($, html) {
     let match;
     const re = new RegExp(pat.re.source, pat.re.flags);
     while ((match = re.exec(fullText)) !== null) {
+      // Skip if inside code blocks (example code on docs/code-hosting sites)
+      if (isInsideCodeBlock(match[0])) continue;
+      // On code-hosting sites, all API key matches are from user code
+      if (isCodeHostingSite) continue;
       // Validate it's not in a false-positive context
       if (!isLikelyFalsePositive(match[0], fullText, match.index)) {
         leaked.apiKeys.push({
@@ -866,22 +900,40 @@ function extractLeakedData($, html) {
   }
 
   // ─── JWT Tokens (must have valid base64url segments) ──────
-  const jwtRegex = /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g;
-  let jwtM;
-  while ((jwtM = jwtRegex.exec(fullText)) !== null) {
-    const token = jwtM[0];
-    // Validate: try to decode header to check it's a real JWT
-    try {
-      const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
-      if (header.alg || header.typ) {
-        leaked.jwtTokens.push({
-          value: token.substring(0, 20) + '...',
-          header: header,
-          confidence: 'high',
-        });
+  // On code-hosting sites, skip JWTs entirely — they're from displayed user code
+  if (!isCodeHostingSite) {
+    const jwtRegex = /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g;
+    let jwtM;
+    while ((jwtM = jwtRegex.exec(fullText)) !== null) {
+      const token = jwtM[0];
+      // Skip JWTs found inside inline <script> tags — these are operational (session tokens)
+      const isInScript = (() => {
+        const before = fullText.substring(Math.max(0, jwtM.index - 5000), jwtM.index);
+        const lastScriptOpen = before.lastIndexOf('<script');
+        const lastScriptClose = before.lastIndexOf('</script');
+        return lastScriptOpen > lastScriptClose;
+      })();
+      if (isInScript) continue;
+
+      // Skip JWTs inside code blocks
+      if (isInsideCodeBlock(token)) continue;
+
+      // Skip if in a false-positive context
+      if (isLikelyFalsePositive(token, fullText, jwtM.index)) continue;
+
+      // Validate: try to decode header to check it's a real JWT
+      try {
+        const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
+        if (header.alg || header.typ) {
+          leaked.jwtTokens.push({
+            value: token.substring(0, 20) + '...',
+            header: header,
+            confidence: 'medium',
+          });
+        }
+      } catch {
+        // Not a valid JWT, skip
       }
-    } catch {
-      // Not a valid JWT, skip
     }
   }
 
@@ -890,6 +942,10 @@ function extractLeakedData($, html) {
   let passM;
   while ((passM = passRe.exec(fullText)) !== null) {
     const val = passM[1];
+    // Skip on code-hosting sites (all passwords are from user code)
+    if (isCodeHostingSite) continue;
+    // Skip if inside code blocks
+    if (isInsideCodeBlock(passM[0])) continue;
     // Skip common non-password values
     const skipValues = ['password', 'pass', 'true', 'false', 'null', 'none',
       'show', 'hide', 'toggle', 'text', 'hidden', 'visible', 'required',
@@ -911,7 +967,32 @@ function extractLeakedData($, html) {
   const dbUrlRegex = /(?:mongodb(?:\+srv)?|mysql|postgresql|postgres|redis|amqp|mssql):\/\/[^\s'"<>]{10,200}/gi;
   const dbUrls = fullText.match(dbUrlRegex);
   if (dbUrls) {
-    leaked.databaseUrls = [...new Set(dbUrls)].map(u => ({
+    // Filter out placeholder/example/localhost DB URLs
+    const placeholderCreds = [
+      'user:password', 'username:password', 'root:password', 'root:root',
+      'admin:admin', 'admin:password', 'user:pass', 'dbuser:dbpass',
+      'myuser:mypass', 'your_username', 'your-username', '<username>',
+      '%s:%s', '${', 'example', 'sample', 'test',
+    ];
+    const placeholderHosts = [
+      'localhost', '127.0.0.1', '0.0.0.0', 'example.com', 'your-host',
+      'your_host', 'myhost', '<host>', 'hostname', 'db-host',
+    ];
+
+    const filtered = [...new Set(dbUrls)].filter(u => {
+      const lower = u.toLowerCase();
+      // Skip placeholder credentials
+      if (placeholderCreds.some(p => lower.includes(p))) return false;
+      // Skip localhost/example hostnames
+      if (placeholderHosts.some(h => lower.includes(h))) return false;
+      // Skip URLs found inside code blocks
+      if (isInsideCodeBlock(u)) return false;
+      // On code-hosting sites, all DB URLs are from displayed code
+      if (isCodeHostingSite) return false;
+      return true;
+    });
+
+    leaked.databaseUrls = filtered.map(u => ({
       value: u.substring(0, 30) + '...',
       protocol: u.split('://')[0],
       confidence: 'high',
@@ -919,31 +1000,44 @@ function extractLeakedData($, html) {
   }
 
   // ─── S3 Buckets ──────────────────────────────
-  const s3Regex = /(?:https?:\/\/)?[a-z0-9][a-z0-9\-]{2,62}\.s3[.\-](?:us|eu|ap|sa|ca|me|af)[a-z0-9\-]*\.amazonaws\.com/gi;
-  const s3alt = /s3:\/\/[a-z0-9][a-z0-9.\-]{2,62}/gi;
-  const s3Matches = [...(fullText.match(s3Regex) || []), ...(fullText.match(s3alt) || [])];
-  if (s3Matches.length) {
-    leaked.s3Buckets = [...new Set(s3Matches)].slice(0, 10).map(b => ({
-      value: b,
-      confidence: 'high',
-    }));
+  if (!isCodeHostingSite) {
+    const s3Regex = /(?:https?:\/\/)?[a-z0-9][a-z0-9\-]{2,62}\.s3[.\-](?:us|eu|ap|sa|ca|me|af)[a-z0-9\-]*\.amazonaws\.com/gi;
+    const s3alt = /s3:\/\/[a-z0-9][a-z0-9.\-]{2,62}/gi;
+    const s3Matches = [...(fullText.match(s3Regex) || []), ...(fullText.match(s3alt) || [])];
+    if (s3Matches.length) {
+      leaked.s3Buckets = [...new Set(s3Matches)].filter(b => !isInsideCodeBlock(b)).slice(0, 10).map(b => ({
+        value: b,
+        confidence: 'high',
+      }));
+    }
   }
 
   // ─── Environment variable references in client-side code ──────
-  // Only in <script> tags, not in general HTML
-  const scriptContent = [];
-  $('script:not([src])').each((_, el) => {
-    const content = $(el).html();
-    if (content) scriptContent.push(content);
-  });
-  const scriptText = scriptContent.join('\n');
+  // Only in <script> tags (not type=application/json which is data, not code)
+  // Skip entirely on code-hosting sites — env var refs are from user code
+  if (!isCodeHostingSite) {
+    const scriptContent = [];
+    $('script:not([src]):not([type="application/json"]):not([type="application/ld+json"])').each((_, el) => {
+      const content = $(el).html();
+      if (content) scriptContent.push(content);
+    });
+    const scriptText = scriptContent.join('\n');
 
-  const envRegex = /process\.env\.([A-Z_][A-Z0-9_]{2,})/g;
-  let envM;
-  while ((envM = envRegex.exec(scriptText)) !== null) {
-    leaked.envVars.push(envM[1]);
+    const envRegex = /process\.env\.([A-Z_][A-Z0-9_]{2,})/g;
+    let envM;
+    while ((envM = envRegex.exec(scriptText)) !== null) {
+      // Skip common non-sensitive env vars
+      const skipEnvVars = [
+        'NODE_ENV', 'PORT', 'HOST', 'HOSTNAME', 'HOME', 'PWD', 'PATH',
+        'LANG', 'SHELL', 'TERM', 'USER', 'LOGNAME', 'TZ', 'CI',
+        'NEXT_PUBLIC_', 'REACT_APP_', 'VITE_', 'NUXT_PUBLIC_',
+      ];
+      const varName = envM[1];
+      if (skipEnvVars.some(s => varName === s || varName.startsWith(s))) continue;
+      leaked.envVars.push(varName);
+    }
+    leaked.envVars = [...new Set(leaked.envVars)].slice(0, 30);
   }
-  leaked.envVars = [...new Set(leaked.envVars)].slice(0, 30);
 
   // ─── Sensitive HTML comments (only truly suspicious ones) ──────
   const commentRegex = /<!--([\s\S]*?)-->/g;

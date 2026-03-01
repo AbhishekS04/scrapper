@@ -30,6 +30,7 @@ const OPTION_GROUPS = [
 
 export default function URLInput({ onSubmit, loading }) {
   const [url, setUrl] = useState('');
+  const [protocol, setProtocol] = useState('https://');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activePreset, setActivePreset] = useState('standard');
   const [options, setOptions] = useState({
@@ -52,13 +53,23 @@ export default function URLInput({ onSubmit, loading }) {
     if (!loading && inputRef.current) inputRef.current.focus();
   }, [loading]);
 
+  const handleUrlChange = (e) => {
+    let value = e.target.value;
+    // Auto-detect protocol when pasting a full URL
+    if (value.startsWith('https://')) {
+      setProtocol('https://');
+      value = value.slice(8);
+    } else if (value.startsWith('http://')) {
+      setProtocol('http://');
+      value = value.slice(7);
+    }
+    setUrl(value);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!url.trim()) return;
-    let finalUrl = url.trim();
-    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
-      finalUrl = 'https://' + finalUrl;
-    }
+    const finalUrl = protocol + url.trim();
     onSubmit(finalUrl, options);
   };
 
@@ -104,13 +115,24 @@ export default function URLInput({ onSubmit, loading }) {
               </div>
             </div>
 
+            {/* Protocol selector */}
+            <select
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value)}
+              className="bg-transparent text-gray-400 text-lg font-mono py-4 focus:outline-none cursor-pointer hover:text-white transition-colors"
+              disabled={loading}
+            >
+              <option value="https://" className="bg-dark-900 text-white">https://</option>
+              <option value="http://" className="bg-dark-900 text-white">http://</option>
+            </select>
+
             <input
               ref={inputRef}
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Enter any URL to scrape (e.g., example.com)"
-              className="flex-1 bg-transparent text-white text-lg font-mono placeholder-gray-600 py-4 px-3 focus:outline-none"
+              onChange={handleUrlChange}
+              placeholder="example.com"
+              className="flex-1 bg-transparent text-white text-lg font-mono placeholder-gray-600 py-4 px-1 focus:outline-none"
               disabled={loading}
             />
 
@@ -160,7 +182,7 @@ export default function URLInput({ onSubmit, loading }) {
       </div>
 
       {/* ─── Quick Presets Row ─── */}
-      <div className="mt-5 flex items-center justify-center gap-3 flex-wrap">
+      <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
         {SCAN_PRESETS.map(preset => (
           <button
             key={preset.key}
