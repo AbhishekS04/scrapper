@@ -140,13 +140,21 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
     ? Math.round(allSecurity.reduce((s, sec) => s + (sec.score || 0), 0) / allSecurity.length)
     : 0;
 
+  // Calculate average SEO score
+  const seoScores = results.map(r => r.seoScore?.score || r.seo_score?.score || 0).filter(s => s > 0);
+  const avgSeoScore = seoScores.length > 0
+    ? Math.round(seoScores.reduce((sum, s) => sum + s, 0) / seoScores.length)
+    : 0;
+  const seoGrade = avgSeoScore >= 90 ? 'A' : avgSeoScore >= 80 ? 'B' : avgSeoScore >= 70 ? 'C' : avgSeoScore >= 60 ? 'D' : 'F';
+
   const stats = [
+    { label: 'SEO Score', value: avgSeoScore > 0 ? `${avgSeoScore}` : '—', color: avgSeoScore >= 80 ? 'text-emerald-400' : avgSeoScore >= 60 ? 'text-amber-400' : avgSeoScore > 0 ? 'text-red-400' : 'text-gray-400', bg: avgSeoScore >= 80 ? 'bg-emerald-500/5 border-emerald-500/10' : avgSeoScore >= 60 ? 'bg-amber-500/5 border-amber-500/10' : avgSeoScore > 0 ? 'bg-red-500/5 border-red-500/10' : 'bg-white/[0.03] border-white/[0.06]', badge: avgSeoScore > 0 ? seoGrade : null },
     { label: 'Pages Scraped', value: job.pagesScraped || job.pages_scraped || results.length, color: 'text-white', bg: 'bg-white/[0.03] border-white/[0.06]' },
+    { label: 'Total Words', value: totalWords.toLocaleString(), color: 'text-white', bg: 'bg-white/[0.03] border-white/[0.06]' },
+    { label: 'Avg Load Time', value: `${avgLoadTime}ms`, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
     { label: 'Internal Links', value: allLinks.internal.length, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
     { label: 'External Links', value: allLinks.external.length, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
     { label: 'Images Found', value: allImages.length, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
-    { label: 'Total Words', value: totalWords.toLocaleString(), color: 'text-white', bg: 'bg-white/[0.03] border-white/[0.06]' },
-    { label: 'Avg Load Time', value: `${avgLoadTime}ms`, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
     { label: 'Scripts Found', value: allScripts.length, color: 'text-gray-300', bg: 'bg-white/[0.03] border-white/[0.06]' },
     { label: 'Security Score', value: `${avgSecScore}%`, color: avgSecScore >= 75 ? 'text-emerald-400' : avgSecScore >= 50 ? 'text-amber-400' : 'text-red-400', bg: avgSecScore >= 75 ? 'bg-emerald-500/5 border-emerald-500/10' : avgSecScore >= 50 ? 'bg-amber-500/5 border-amber-500/10' : 'bg-red-500/5 border-red-500/10' },
   ];
@@ -169,11 +177,24 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {stats.map(stat => (
           <div key={stat.label} className={`stat-card border ${stat.bg}`}>
-            <div className={`text-2xl font-bold font-mono ${stat.color} animate-count-up`}>
-              {stat.value}
+            <div className="flex items-center gap-2">
+              <div className={`text-2xl font-bold font-mono ${stat.color} animate-count-up`}>
+                {stat.value}
+              </div>
+              {stat.badge && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                  stat.badge === 'A' ? 'bg-emerald-500/20 text-emerald-400' :
+                  stat.badge === 'B' ? 'bg-green-500/20 text-green-400' :
+                  stat.badge === 'C' ? 'bg-amber-500/20 text-amber-400' :
+                  stat.badge === 'D' ? 'bg-orange-500/20 text-orange-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {stat.badge}
+                </span>
+              )}
             </div>
             <div className="text-[10px] text-gray-500 mt-1.5 uppercase tracking-[0.15em]">{stat.label}</div>
           </div>

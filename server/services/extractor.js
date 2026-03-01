@@ -45,6 +45,9 @@ export function extractPageData(html, pageUrl, headers = {}) {
   // Generate suggestions based on all extracted data
   data.suggestions = generateSuggestions($, data, pageUrl);
 
+  // Calculate SEO score
+  data.seoScore = calculateSEOScore($, data);
+
   return data;
 }
 
@@ -694,8 +697,28 @@ function extractForms($, baseUrl) {
 }
 
 function countWords($) {
-  const text = $('body').text().replace(/\s+/g, ' ').trim();
-  return text ? text.split(/\s+/).length : 0;
+  // Remove script and style content first
+  const $clone = $.root().clone();
+  $clone.find('script, style, noscript, svg, code, pre').remove();
+  
+  // Get text from body, or whole document if no body
+  let text = $clone.find('body').text() || $clone.text();
+  
+  // Clean up whitespace and normalize
+  text = text
+    .replace(/[\r\n\t]+/g, ' ')  // Replace newlines/tabs with spaces
+    .replace(/\s+/g, ' ')         // Collapse multiple spaces
+    .trim();
+  
+  if (!text) return 0;
+  
+  // Split by whitespace and filter out empty/short tokens
+  const words = text.split(/\s+/).filter(word => {
+    // Must be at least 1 character and contain at least one letter
+    return word.length >= 1 && /[a-zA-Z]/.test(word);
+  });
+  
+  return words.length;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1430,4 +1453,139 @@ function generateSuggestions($, data, pageUrl) {
   suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
   return suggestions;
+}
+
+/**
+ * Calculate comprehensive SEO score (0-100)
+ */
+function calculateSEOScore($, data) {
+  let score = 100;
+  const deductions = [];
+
+  // ─── Title Analysis (max -20) ───
+  if (!data.title) {
+    score -= 20;
+    deductions.push({ reason: 'Missing title', points: -20 });
+  } else {
+    if (data.title.length < 20) {
+      score -= 10;
+      deductions.push({ reason: 'Title too short', points: -10 });
+    } else if (data.title.length > 70) {
+      score -= 5;
+      deductions.push({ reason: 'Title too long', points: -5 });
+    }
+  }
+
+  // ─── Meta Description (max -15) ───
+  if (!data.metaDescription) {
+    score -= 15;
+    deductions.push({ reason: 'Missing meta description', points: -15 });
+  } else {
+    if (data.metaDescription.length < 70) {
+      score -= 7;
+      deductions.push({ reason: 'Meta description too short', points: -7 });
+    } else if (data.metaDescription.length > 160) {
+      score -= 3;
+      deductions.push({ reason: 'Meta description too long', points: -3 });
+    }
+  }
+
+  // ─── Headings Structure (max -15) ───
+  const h1Count = data.headings?.h1?.length || 0;
+  const h2Count = data.headings?.h2?.length || 0;
+  
+  if (h1Count === 0) {
+    score -= 10;
+    deductions.push({ reason: 'Missing H1 heading', points: -10 });
+  } else if (h1Count > 1) {
+    score -= 5;
+    deductions.push({ reason: 'Multiple H1 headings', points: -5 });
+  }
+  
+  if (h2Count === 0 && data.wordCount > 100) {
+    score -= 5;
+    deductions.push({ reason: 'No H2 subheadings', points: -5 });
+  }
+
+  // ─── Content Quality (max -15) ───
+  if (data.wordCount < 50) {
+    score -= 15;
+    deductions.push({ reason: 'Very thin content', points: -15 });
+  } else if (data.wordCount < 150) {
+    score -= 10;
+    deductions.push({ reason: 'Low word count', points: -10 });
+  } else if (data.wordCount < 300) {
+    score -= 5;
+    deductions.push({ reason: 'Could use more content', points: -5 });
+  }
+
+  // ─── Images (max -10) ───
+  const images = data.images || [];
+  const imagesWithoutAlt = images.filter(img => !img.alt || img.alt.trim() === '').length;
+  const totalImages = images.length;
+  
+  if (totalImages > 0) {
+    const percentWithoutAlt = (imagesWithoutAlt / totalImages) * 100;
+    if (percentWithoutAlt > 50) {
+      score -= 10;
+      deductions.push({ reason: 'Most images missing alt text', points: -10 });
+    } else if (percentWithoutAlt > 25) {
+      score -= 5;
+      deductions.push({ reason: 'Some images missing alt text', points: -5 });
+    }
+  }
+
+  // ─── Links (max -10) ───
+  const internalLinks = data.linksInternal?.length || 0;
+  const externalLinks = data.linksExternal?.length || 0;
+  
+  if (internalLinks === 0) {
+    score -= 5;
+    deductions.push({ reason: 'No internal links', points: -5 });
+  }
+  
+  if (externalLinks === 0 && data.wordCount > 300) {
+    score -= 3;
+    deductions.push({ reason: 'No external links', points: -3 });
+  }
+
+  // ─── Technical SEO (max -15) ───
+  const metadata = data.metadata || {};
+  
+  if (!metadata.canonical) {
+    score -= 5;
+    deductions.push({ reason: 'Missing canonical URL', points: -5 });
+  }
+  
+  if (!metadata.ogTitle && !metadata.ogDescription) {
+    score -= 5;
+    deductions.push({ reason: 'Missing Open Graph tags', points: -5 });
+  }
+  
+  if (!metadata.viewport) {
+    score -= 5;
+    deductions.push({ reason: 'Missing viewport meta tag', points: -5 });
+  }
+
+  const htmlLang = $('html').attr('lang');
+  if (!htmlLang) {
+    score -= 3;
+    deductions.push({ reason: 'Missing lang attribute', points: -3 });
+  }
+
+  // ─── Structured Data Bonus (+5) ───
+  const jsonLd = metadata.jsonLd || [];
+  if (jsonLd.length > 0) {
+    score += 5;
+    deductions.push({ reason: 'Has structured data', points: +5 });
+  }
+
+  // Ensure score is within 0-100
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    score: Math.round(score),
+    deductions,
+    grade: score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F',
+  };
 }

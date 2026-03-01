@@ -49,6 +49,7 @@ exportRoutes.get('/export/:id/json', async (req, res) => {
         formsData: r.formsData,
         wordCount: r.wordCount,
         loadTimeMs: r.loadTimeMs,
+        seoScore: r.seoScore,
         scrapedAt: r.scrapedAt,
       })),
     };
@@ -82,6 +83,8 @@ exportRoutes.get('/export/:id/csv', async (req, res) => {
       page_url: r.pageUrl,
       title: r.title || '',
       meta_description: r.metaDescription || '',
+      seo_score: r.seoScore?.score || 0,
+      seo_grade: r.seoScore?.grade || '',
       word_count: r.wordCount || 0,
       load_time_ms: r.loadTimeMs || 0,
       h1_count: Array.isArray(r.headings?.h1) ? r.headings.h1.length : 0,
