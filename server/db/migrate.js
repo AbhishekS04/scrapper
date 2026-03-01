@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
 import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -20,6 +26,7 @@ async function migrate() {
     await sql`
       CREATE TABLE IF NOT EXISTS scrape_jobs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL DEFAULT 'anonymous',
         url TEXT NOT NULL,
         status job_status NOT NULL DEFAULT 'pending',
         options JSONB DEFAULT '{}',
@@ -62,6 +69,11 @@ async function migrate() {
     await sql`CREATE INDEX IF NOT EXISTS idx_scrape_results_job_id ON scrape_results(job_id);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_status ON scrape_jobs(status);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_created_at ON scrape_jobs(created_at);`;
+
+    // Add user_id column if it doesn't exist (for existing databases)
+    await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'anonymous';`;
+
+    await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_user_id ON scrape_jobs(user_id);`;
 
     console.log('✅ Database migration completed successfully!');
   } catch (error) {

@@ -1,21 +1,46 @@
 import { useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 
 export default function ExportBar({ jobId, jobData }) {
+  const { getToken } = useAuth();
   const [copied, setCopied] = useState(false);
 
   if (!jobId || !jobData) return null;
 
-  const downloadJSON = () => {
-    window.open(`/api/export/${jobId}/json`, '_blank');
+  const downloadJSON = async () => {
+    const token = await getToken();
+    const res = await fetch(`/api/export/${jobId}/json`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scrape-${jobId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const downloadCSV = () => {
-    window.open(`/api/export/${jobId}/csv`, '_blank');
+  const downloadCSV = async () => {
+    const token = await getToken();
+    const res = await fetch(`/api/export/${jobId}/csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scrape-${jobId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const copyToClipboard = async () => {
     try {
-      const res = await fetch(`/api/job/${jobId}`);
+      const token = await getToken();
+      const res = await fetch(`/api/job/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
       setCopied(true);

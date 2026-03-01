@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 
 const API_BASE = '/api';
 
 export function useScrapeJob() {
+  const { getToken } = useAuth();
   const [jobId, setJobId] = useState(null);
   const [jobData, setJobData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -11,6 +13,12 @@ export function useScrapeJob() {
   const [status, setStatus] = useState('idle'); // idle, running, completed, failed
   const [stats, setStats] = useState({ pagesScraped: 0, totalFound: 0, percentage: 0 });
   const eventSourceRef = useRef(null);
+  const tokenRef = useRef(null);
+
+  // Keep token ref updated
+  useEffect(() => {
+    getToken().then(t => { tokenRef.current = t; });
+  }, [getToken]);
 
   // Cleanup SSE on unmount
   useEffect(() => {
@@ -72,9 +80,15 @@ export function useScrapeJob() {
     };
   }, []);
 
+  const authHeaders = useCallback(async () => {
+    const token = await getToken();
+    return { Authorization: `Bearer ${token}` };
+  }, [getToken]);
+
   const fetchJobResults = useCallback(async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/job/${id}`);
+      const headers = await authHeaders();
+      const res = await fetch(`${API_BASE}/job/${id}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setJobData(data);
@@ -104,15 +118,22 @@ export function useScrapeJob() {
     setStats({ pagesScraped: 0, totalFound: 0, percentage: 0 });
 
     try {
+      const headers = await authHeaders();
       const res = await fetch(`${API_BASE}/scrape`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ url, options }),
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to start scrape');
+        let errMsg = 'Failed to start scrape';
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errMsg;
+        } catch {
+          errMsg = `Server returned ${res.status}`;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await res.json();

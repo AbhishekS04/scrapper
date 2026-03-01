@@ -1,4 +1,11 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import {
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from '@clerk/clerk-react';
 import Home from './pages/Home.jsx';
 import History from './pages/History.jsx';
 
@@ -20,26 +27,52 @@ function NavBar() {
         </Link>
 
         <div className="flex items-center gap-1">
-          <Link
-            to="/"
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              location.pathname === '/'
-                ? 'text-white bg-white/[0.1]'
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
-            }`}
-          >
-            Scraper
-          </Link>
-          <Link
-            to="/history"
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              location.pathname === '/history'
-                ? 'text-white bg-white/[0.1]'
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
-            }`}
-          >
-            History
-          </Link>
+          <SignedIn>
+            <Link
+              to="/"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                location.pathname === '/'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              Scraper
+            </Link>
+            <Link
+              to="/history"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                location.pathname === '/history'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              History
+            </Link>
+          </SignedIn>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/[0.05] transition-all duration-200">
+                Sign In
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="btn-primary text-xs py-2 px-4">
+                Sign Up
+              </button>
+            </SignUpButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: 'w-8 h-8',
+                },
+              }}
+            />
+          </SignedIn>
         </div>
       </div>
     </nav>
@@ -52,12 +85,75 @@ export default function App() {
       <div className="min-h-screen bg-dark-950 grid-bg">
         <NavBar />
         <main className="pt-16">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/history" element={<History />} />
-          </Routes>
+          <SignedIn>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/history" element={<History />} />
+            </Routes>
+          </SignedIn>
+          <SignedOut>
+            <LandingPage />
+          </SignedOut>
         </main>
       </div>
     </BrowserRouter>
+  );
+}
+
+function LandingPage() {
+  return (
+    <div className="relative flex flex-col items-center justify-center pt-20 pb-12 px-6 animate-fade-in">
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Logo badge */}
+        <div className="relative mb-8">
+          <div className="w-20 h-20 rounded-3xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+            <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+            </svg>
+          </div>
+        </div>
+
+        <h1 className="text-5xl md:text-7xl font-black tracking-tight text-center mb-4">
+          <span className="text-white">Scrape</span>
+          <span className="text-gray-500">It</span>
+        </h1>
+
+        <p className="text-gray-400 text-lg md:text-xl mb-2 text-center max-w-2xl">
+          Web intelligence & data extraction platform
+        </p>
+        <p className="text-gray-600 text-sm mb-8 text-center max-w-lg">
+          Extract links, images, metadata, contacts, tech stack, security headers, scripts, and more.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <SignInButton mode="modal">
+            <button className="btn-primary">
+              Sign In to Get Started
+            </button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button className="btn-secondary">
+              Create Account
+            </button>
+          </SignUpButton>
+        </div>
+
+        {/* Feature cards */}
+        <div className="mt-16 max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { icon: '⚡', title: 'Lightning Fast', desc: 'Smart engine: Axios for static pages, Playwright for JS-heavy sites.' },
+            { icon: '🔓', title: 'Leak Detection', desc: 'High-accuracy scan for exposed API keys, tokens, passwords, AWS secrets.' },
+            { icon: '🛡️', title: 'Security Audit', desc: 'Check HTTP security headers, CSP, HSTS, and vulnerability indicators.' },
+            { icon: '📊', title: 'Full Extraction', desc: 'Links, images, scripts, forms, tables, contacts, metadata, tech stack.' },
+          ].map(card => (
+            <div key={card.title} className="glass-panel-hover p-5 group/card">
+              <div className="text-2xl mb-3 w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04]">{card.icon}</div>
+              <h3 className="text-white font-semibold mb-1.5 text-sm">{card.title}</h3>
+              <p className="text-gray-500 text-xs leading-relaxed">{card.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -14,6 +14,7 @@ if (!process.env.VERCEL) {
 
 import express from 'express';
 import cors from 'cors';
+import { clerkMiddleware, getAuth } from '@clerk/express';
 import { scrapeRoutes } from './routes/scrape.js';
 import { jobsRoutes } from './routes/jobs.js';
 import { exportRoutes } from './routes/export.js';
@@ -39,6 +40,9 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Clerk authentication middleware
+app.use(clerkMiddleware());
 
 // Rate limiting - simple in-memory tracker
 const activeJobs = new Map();

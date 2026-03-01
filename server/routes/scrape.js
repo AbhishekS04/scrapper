@@ -3,14 +3,17 @@ import { db } from '../services/db.js';
 import { scrapeJobs } from '../db/schema.js';
 import { startScrapeJob, addSSEClient, removeSSEClient } from '../services/scraper.js';
 import { eq } from 'drizzle-orm';
+import { getAuth } from '@clerk/express';
 
 export const scrapeRoutes = Router();
 
 /**
- * POST /api/scrape — Start a new scrape job
+ * POST /api/scrape — Start a new scrape job (requires auth)
  */
 scrapeRoutes.post('/scrape', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized — please sign in' });
     const { url, options = {} } = req.body;
 
     if (!url) {
@@ -39,6 +42,7 @@ scrapeRoutes.post('/scrape', async (req, res) => {
 
     // Create job in DB
     const [job] = await db.insert(scrapeJobs).values({
+      userId,
       url: parsedUrl.href,
       status: 'pending',
       options,

@@ -4,6 +4,7 @@ export const jobStatusEnum = pgEnum('job_status', ['pending', 'running', 'comple
 
 export const scrapeJobs = pgTable('scrape_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
   url: text('url').notNull(),
   status: jobStatusEnum('status').default('pending').notNull(),
   options: jsonb('options').default({}),

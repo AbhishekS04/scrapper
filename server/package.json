@@ -10,6 +10,7 @@
     "db:push": "node db/migrate.js"
   },
   "dependencies": {
+    "@clerk/express": "^1.7.76",
     "@neondatabase/serverless": "^0.10.4",
     "axios": "^1.7.9",
     "cheerio": "^1.0.0",

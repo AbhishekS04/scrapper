@@ -1,18 +1,22 @@
 import { Router } from 'express';
 import { db } from '../services/db.js';
 import { scrapeJobs, scrapeResults } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
+import { getAuth } from '@clerk/express';
 
 export const jobsRoutes = Router();
 
 /**
- * GET /api/jobs — Get all past scrape jobs
+ * GET /api/jobs — Get current user's scrape jobs
  */
 jobsRoutes.get('/jobs', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const jobs = await db
       .select()
       .from(scrapeJobs)
+      .where(eq(scrapeJobs.userId, userId))
       .orderBy(desc(scrapeJobs.createdAt));
 
     res.json(jobs);
@@ -23,16 +27,18 @@ jobsRoutes.get('/jobs', async (req, res) => {
 });
 
 /**
- * GET /api/job/:id — Get job status + results
+ * GET /api/job/:id — Get job status + results (only if owned by user)
  */
 jobsRoutes.get('/job/:id', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const jobId = req.params.id;
 
     const [job] = await db
       .select()
       .from(scrapeJobs)
-      .where(eq(scrapeJobs.id, jobId));
+      .where(and(eq(scrapeJobs.id, jobId), eq(scrapeJobs.userId, userId)));
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -51,16 +57,18 @@ jobsRoutes.get('/job/:id', async (req, res) => {
 });
 
 /**
- * DELETE /api/job/:id — Delete a job and its results
+ * DELETE /api/job/:id — Delete a job and its results (only if owned by user)
  */
 jobsRoutes.delete('/job/:id', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const jobId = req.params.id;
 
     const [job] = await db
       .select()
       .from(scrapeJobs)
-      .where(eq(scrapeJobs.id, jobId));
+      .where(and(eq(scrapeJobs.id, jobId), eq(scrapeJobs.userId, userId)));
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });

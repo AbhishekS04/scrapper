@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 
 export default function HistoryTable({ onLoadJob }) {
+  const { getToken } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/jobs');
+      const token = await getToken();
+      const res = await fetch('/api/jobs', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setJobs(data);
@@ -25,7 +30,11 @@ export default function HistoryTable({ onLoadJob }) {
   const deleteJob = async (id) => {
     if (!confirm('Are you sure you want to delete this job?')) return;
     try {
-      const res = await fetch(`/api/job/${id}`, { method: 'DELETE' });
+      const token = await getToken();
+      const res = await fetch(`/api/job/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         setJobs(prev => prev.filter(j => j.id !== id));
       }

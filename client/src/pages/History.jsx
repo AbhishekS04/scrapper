@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import HistoryTable from '../components/HistoryTable.jsx';
 import ResultsTabs from '../components/ResultsTabs.jsx';
 import ExportBar from '../components/ExportBar.jsx';
 
 export default function History() {
+  const { getToken } = useAuth();
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobData, setJobData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -13,7 +15,10 @@ export default function History() {
   const loadJob = async (jobId) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/job/${jobId}`);
+      const token = await getToken();
+      const res = await fetch(`/api/job/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setSelectedJob(jobId);

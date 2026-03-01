@@ -1,19 +1,22 @@
 import { Router } from 'express';
 import { db } from '../services/db.js';
 import { scrapeJobs, scrapeResults } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { stringify } from 'csv-stringify/sync';
+import { getAuth } from '@clerk/express';
 
 export const exportRoutes = Router();
 
 /**
- * GET /api/export/:id/json — Download results as JSON
+ * GET /api/export/:id/json — Download results as JSON (auth required)
  */
 exportRoutes.get('/export/:id/json', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const jobId = req.params.id;
 
-    const [job] = await db.select().from(scrapeJobs).where(eq(scrapeJobs.id, jobId));
+    const [job] = await db.select().from(scrapeJobs).where(and(eq(scrapeJobs.id, jobId), eq(scrapeJobs.userId, userId)));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const results = await db.select().from(scrapeResults).where(eq(scrapeResults.jobId, jobId));
@@ -66,9 +69,11 @@ exportRoutes.get('/export/:id/json', async (req, res) => {
  */
 exportRoutes.get('/export/:id/csv', async (req, res) => {
   try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const jobId = req.params.id;
 
-    const [job] = await db.select().from(scrapeJobs).where(eq(scrapeJobs.id, jobId));
+    const [job] = await db.select().from(scrapeJobs).where(and(eq(scrapeJobs.id, jobId), eq(scrapeJobs.userId, userId)));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const results = await db.select().from(scrapeResults).where(eq(scrapeResults.jobId, jobId));
