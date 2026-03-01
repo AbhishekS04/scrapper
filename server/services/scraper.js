@@ -338,6 +338,7 @@ export async function startScrapeJob(jobId, url, options = {}) {
           iframes: pageData.iframes || [],
           downloads: pageData.downloads || [],
           videos: pageData.videos || [],
+          suggestions: pageData.suggestions || [],
         });
 
         pagesScraped++;

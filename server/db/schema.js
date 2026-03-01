@@ -46,5 +46,6 @@ export const scrapeResults = pgTable('scrape_results', {
   iframes: jsonb('iframes').default([]),
   downloads: jsonb('downloads').default([]),
   videos: jsonb('videos').default([]),
+  suggestions: jsonb('suggestions').default([]),
   scrapedAt: timestamp('scraped_at').defaultNow().notNull(),
 });

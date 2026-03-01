@@ -75,6 +75,20 @@ async function migrate() {
 
     await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_user_id ON scrape_jobs(user_id);`;
 
+    // Add advanced columns if they don't exist
+    const advancedCols = [
+      'scripts', 'stylesheets', 'comments', 'leaked_data', 'security_info',
+      'hidden_fields', 'iframes', 'downloads', 'videos', 'suggestions'
+    ];
+    for (const col of advancedCols) {
+      const defaultVal = ['leaked_data', 'security_info'].includes(col) ? "'{}'" : "'[]'";
+      await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name=${col}`.then(async rows => {
+        if (rows.length === 0) {
+          await sql(`ALTER TABLE scrape_results ADD COLUMN ${col} JSONB DEFAULT ${defaultVal}`);
+        }
+      });
+    }
+
     console.log('✅ Database migration completed successfully!');
   } catch (error) {
     console.error('❌ Migration failed:', error.message);

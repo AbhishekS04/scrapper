@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: '�' },
+  { id: 'overview', label: 'Overview', icon: '◆' },
+  { id: 'suggestions', label: 'Suggestions', icon: '💡' },
   { id: 'links', label: 'Links', icon: '🔗' },
   { id: 'images', label: 'Images', icon: '🖼️' },
   { id: 'text', label: 'Text', icon: '📝' },
@@ -47,13 +48,20 @@ export default function ResultsTabs({ jobData }) {
   const allIframes = results.flatMap(r => r.iframes || []);
   const allDownloads = results.flatMap(r => r.downloads || []);
   const allVideos = results.flatMap(r => r.videos || []);
+  const allSuggestions = results.flatMap(r => r.suggestions || []);
+
+  // Deduplicate suggestions by title
+  const uniqueSuggestions = allSuggestions.filter((s, i, arr) =>
+    arr.findIndex(x => x.title === s.title) === i
+  );
 
   // Check if leaks were found
   const hasLeaks = allLeaked.some(l => (l.totalFindings || 0) > 0);
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'overview': return <OverviewTab job={job} results={results} allLinks={allLinks} allImages={allImages} allScripts={allScripts} allLeaked={allLeaked} allSecurity={allSecurity} />;
+      case 'overview': return <OverviewTab job={job} results={results} allLinks={allLinks} allImages={allImages} allScripts={allScripts} allLeaked={allLeaked} allSecurity={allSecurity} suggestions={uniqueSuggestions} />;
+      case 'suggestions': return <SuggestionsTab suggestions={uniqueSuggestions} />;
       case 'links': return <LinksTab links={allLinks} />;
       case 'images': return <ImagesTab images={allImages} />;
       case 'text': return <TextTab results={results} />;
@@ -87,6 +95,11 @@ export default function ResultsTabs({ jobData }) {
                 {tab.id === 'leaks' && hasLeaks && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
                 )}
+                {tab.id === 'suggestions' && uniqueSuggestions.length > 0 && (
+                  <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-mono">
+                    {uniqueSuggestions.length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -102,7 +115,7 @@ export default function ResultsTabs({ jobData }) {
 }
 
 /* ─── Overview Tab ────────────────────────────────────────────── */
-function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked, allSecurity }) {
+function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked, allSecurity, suggestions }) {
   const firstResult = results[0];
   const totalWords = results.reduce((sum, r) => sum + (r.wordCount || r.word_count || 0), 0);
   const avgLoadTime = results.length > 0
@@ -171,6 +184,179 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
       <div className="flex gap-4 text-xs text-gray-500">
         <span>📖 Reading time: <span className="text-gray-300 font-mono">{readingTime} min</span></span>
         <span>📊 {results.length} page{results.length !== 1 ? 's' : ''} analyzed</span>
+      </div>
+
+      {/* Suggestions summary */}
+      {suggestions.length > 0 && (
+        <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="text-amber-400 text-lg">💡</div>
+            <div>
+              <div className="text-amber-300 font-semibold text-sm">{suggestions.length} Improvement Suggestion{suggestions.length !== 1 ? 's' : ''}</div>
+              <div className="text-amber-400/70 text-xs mt-1">
+                Found {suggestions.filter(s => s.priority === 'high').length} high priority,{' '}
+                {suggestions.filter(s => s.priority === 'medium').length} medium, and{' '}
+                {suggestions.filter(s => s.priority === 'low').length} low priority suggestions.
+                Check the “Suggestions” tab for details.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Suggestions Tab ─────────────────────────────────────────── */
+function SuggestionsTab({ suggestions }) {
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+
+  const categories = ['all', ...new Set(suggestions.map(s => s.category))];
+  const priorities = ['all', 'high', 'medium', 'low'];
+
+  const filtered = suggestions.filter(s => {
+    if (filterCategory !== 'all' && s.category !== filterCategory) return false;
+    if (filterPriority !== 'all' && s.priority !== filterPriority) return false;
+    return true;
+  });
+
+  const priorityConfig = {
+    high: { color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', badge: 'bg-red-500/20 text-red-400', icon: '🔴' },
+    medium: { color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', badge: 'bg-amber-500/20 text-amber-400', icon: '🟡' },
+    low: { color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', badge: 'bg-blue-500/20 text-blue-400', icon: '🔵' },
+  };
+
+  const categoryConfig = {
+    seo: { label: 'SEO', icon: '🔍', color: 'text-emerald-400' },
+    accessibility: { label: 'Accessibility', icon: '♿', color: 'text-purple-400' },
+    performance: { label: 'Performance', icon: '⚡', color: 'text-yellow-400' },
+    security: { label: 'Security', icon: '🛡️', color: 'text-red-400' },
+    content: { label: 'Content', icon: '📝', color: 'text-sky-400' },
+    technical: { label: 'Technical', icon: '⚙️', color: 'text-gray-400' },
+  };
+
+  // Category summary counts
+  const categoryCounts = {};
+  suggestions.forEach(s => {
+    categoryCounts[s.category] = (categoryCounts[s.category] || 0) + 1;
+  });
+
+  const highCount = suggestions.filter(s => s.priority === 'high').length;
+  const mediumCount = suggestions.filter(s => s.priority === 'medium').length;
+  const lowCount = suggestions.filter(s => s.priority === 'low').length;
+
+  // Health score (simple: deduct points per issue)
+  const healthScore = Math.max(0, Math.min(100,
+    100 - (highCount * 12) - (mediumCount * 5) - (lowCount * 2)
+  ));
+  const healthColor = healthScore >= 80 ? 'text-emerald-400' : healthScore >= 50 ? 'text-amber-400' : 'text-red-400';
+  const healthBg = healthScore >= 80 ? 'bg-emerald-500/10 border-emerald-500/20' : healthScore >= 50 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-red-500/10 border-red-500/20';
+
+  return (
+    <div className="space-y-6">
+      {/* Health Score Card */}
+      <div className={`rounded-xl border p-5 ${healthBg} flex items-center gap-6`}>
+        <div className="flex-shrink-0 text-center">
+          <div className={`text-4xl font-bold font-mono ${healthColor}`}>{healthScore}</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Health Score</div>
+        </div>
+        <div className="flex-1">
+          <div className="w-full bg-dark-700 rounded-full h-2.5 mb-3">
+            <div
+              className={`h-2.5 rounded-full transition-all duration-1000 ${healthScore >= 80 ? 'bg-emerald-500' : healthScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+              style={{ width: `${healthScore}%` }}
+            />
+          </div>
+          <div className="flex gap-4 text-xs">
+            <span className="text-red-400">{highCount} Critical</span>
+            <span className="text-amber-400">{mediumCount} Warnings</span>
+            <span className="text-blue-400">{lowCount} Info</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        {Object.entries(categoryConfig).map(([key, cfg]) => {
+          const count = categoryCounts[key] || 0;
+          return (
+            <button
+              key={key}
+              onClick={() => setFilterCategory(filterCategory === key ? 'all' : key)}
+              className={`rounded-lg border px-3 py-2.5 text-center transition-all ${
+                filterCategory === key
+                  ? 'bg-white/10 border-white/20'
+                  : count > 0
+                    ? 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05]'
+                    : 'bg-white/[0.01] border-white/[0.03] opacity-50'
+              }`}
+            >
+              <div className="text-lg">{cfg.icon}</div>
+              <div className={`text-xs font-medium mt-1 ${count > 0 ? cfg.color : 'text-gray-600'}`}>{cfg.label}</div>
+              <div className="text-[10px] text-gray-500 font-mono mt-0.5">{count} issue{count !== 1 ? 's' : ''}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 items-center">
+        <span className="text-xs text-gray-500">Priority:</span>
+        {priorities.map(p => (
+          <button
+            key={p}
+            onClick={() => setFilterPriority(p)}
+            className={`text-[11px] px-2.5 py-1 rounded-md transition-all ${
+              filterPriority === p
+                ? 'bg-white/10 text-white border border-white/20'
+                : 'text-gray-500 hover:text-gray-300 border border-transparent'
+            }`}
+          >
+            {p === 'all' ? 'All' : p === 'high' ? '🔴 High' : p === 'medium' ? '🟡 Medium' : '🔵 Low'}
+          </button>
+        ))}
+        <span className="text-xs text-gray-600 ml-auto">{filtered.length} of {suggestions.length} showing</span>
+      </div>
+
+      {/* Suggestions List */}
+      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <div className="text-4xl mb-3">✅</div>
+            <p className="text-sm font-medium text-gray-400">
+              {suggestions.length === 0 ? 'No issues found — looking good!' : 'No suggestions match the current filters.'}
+            </p>
+          </div>
+        ) : filtered.map((s, i) => {
+          const pCfg = priorityConfig[s.priority] || priorityConfig.low;
+          const cCfg = categoryConfig[s.category] || { label: s.category, icon: '📋', color: 'text-gray-400' };
+          return (
+            <div key={i} className={`rounded-xl border p-4 ${pCfg.bg} transition-all hover:border-white/10`}>
+              <div className="flex items-start gap-3">
+                <span className="text-sm mt-0.5 flex-shrink-0">{pCfg.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className="text-sm font-semibold text-white">{s.title}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${pCfg.badge}`}>
+                      {s.priority}
+                    </span>
+                    <span className={`text-[10px] ${cCfg.color} flex items-center gap-1`}>
+                      {cCfg.icon} {cCfg.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed">{s.description}</p>
+                  {s.impact && (
+                    <div className="mt-2 text-[10px] text-gray-500 flex items-center gap-1.5">
+                      <span className="text-gray-600">Impact:</span>
+                      <span className={pCfg.color}>{s.impact}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

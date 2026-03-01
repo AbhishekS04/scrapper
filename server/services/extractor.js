@@ -13,7 +13,7 @@ export function extractPageData(html, pageUrl, headers = {}) {
   const $ = cheerio.load(html);
   const baseUrl = new URL(pageUrl);
 
-  return {
+  const data = {
     title: extractTitle($),
     metaDescription: extractMetaDescription($),
     headings: extractHeadings($),
@@ -22,14 +22,14 @@ export function extractPageData(html, pageUrl, headers = {}) {
     linksExternal: extractLinks($, baseUrl, 'external'),
     images: extractImages($, baseUrl),
     emails: extractEmails($, html),
-    phones: extractPhones(html),
+    phones: extractPhones($, html),
     socialLinks: extractSocialLinks($, html),
     metadata: extractMetadata($, pageUrl),
     techStack: detectTechStack(html, headers),
     tablesData: extractTables($),
     formsData: extractForms($, baseUrl),
     wordCount: countWords($),
-    // ─── NEW: Advanced extractions ───
+    // ─── Advanced extractions ───
     scripts: extractScripts($, baseUrl),
     stylesheets: extractStylesheets($, baseUrl),
     comments: extractComments(html),
@@ -40,6 +40,11 @@ export function extractPageData(html, pageUrl, headers = {}) {
     downloads: extractDownloadables($, baseUrl),
     videos: extractVideos($, baseUrl),
   };
+
+  // Generate suggestions based on all extracted data
+  data.suggestions = generateSuggestions($, data, pageUrl);
+
+  return data;
 }
 
 function extractTitle($) {
@@ -110,29 +115,111 @@ function extractImages($, baseUrl) {
   const images = [];
   const seen = new Set();
 
-  $('img').each((_, el) => {
-    const src = $(el).attr('src') || $(el).attr('data-src');
-    if (!src) return;
-
+  const addImage = (src, alt, width, height, source) => {
+    if (!src || src.startsWith('data:image/svg') && src.length < 200) return; // skip tiny inline SVGs
     let absoluteSrc;
     try {
       absoluteSrc = new URL(src, baseUrl.origin).href;
     } catch {
       absoluteSrc = src;
     }
-
+    // Skip tracking pixels and tiny spacers
+    if (absoluteSrc.includes('1x1') || absoluteSrc.includes('pixel') || absoluteSrc.includes('spacer')) return;
     if (seen.has(absoluteSrc)) return;
     seen.add(absoluteSrc);
-
     images.push({
       src: absoluteSrc,
-      alt: $(el).attr('alt')?.trim() || null,
-      width: $(el).attr('width') || null,
-      height: $(el).attr('height') || null,
+      alt: alt || null,
+      width: width || null,
+      height: height || null,
+      source: source || 'img',
     });
+  };
+
+  // 1. Standard <img> tags — check multiple src attributes
+  const lazyAttrs = ['src', 'data-src', 'data-lazy-src', 'data-original', 'data-image',
+    'data-bg', 'data-lazy', 'data-srcset', 'data-fallback-src', 'data-hi-res-src'];
+
+  $('img').each((_, el) => {
+    const alt = $(el).attr('alt')?.trim();
+    const width = $(el).attr('width');
+    const height = $(el).attr('height');
+
+    // Try each src attribute
+    for (const attr of lazyAttrs) {
+      const val = $(el).attr(attr);
+      if (val && !val.startsWith('data:image/gif') && !val.startsWith('data:image/png;base64,iVBOR') && val.length < 5) {
+        // skip tiny base64 placeholders
+      }
+      if (val && val.length > 5) {
+        addImage(val, alt, width, height, 'img');
+        break; // use first valid src found
+      }
+    }
+
+    // Also parse srcset for high-res images
+    const srcset = $(el).attr('srcset');
+    if (srcset) {
+      const parts = srcset.split(',');
+      for (const part of parts) {
+        const url = part.trim().split(/\s+/)[0];
+        if (url && url.length > 5) {
+          addImage(url, alt, width, height, 'srcset');
+        }
+      }
+    }
   });
 
-  return images.slice(0, 200);
+  // 2. <picture> → <source> elements
+  $('picture source').each((_, el) => {
+    const srcset = $(el).attr('srcset');
+    if (srcset) {
+      const parts = srcset.split(',');
+      for (const part of parts) {
+        const url = part.trim().split(/\s+/)[0];
+        if (url && url.length > 5) {
+          addImage(url, null, null, null, 'picture');
+        }
+      }
+    }
+  });
+
+  // 3. CSS background images from inline styles
+  $('[style]').each((_, el) => {
+    const style = $(el).attr('style');
+    if (!style) return;
+    const bgMatch = style.match(/background(?:-image)?\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
+    if (bgMatch && bgMatch[1] && bgMatch[1].length > 5 && !bgMatch[1].startsWith('data:')) {
+      addImage(bgMatch[1], null, null, null, 'css-bg');
+    }
+  });
+
+  // 4. Open Graph & Twitter Card images (meta tags)
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage) addImage(ogImage, 'Open Graph Image', null, null, 'og:image');
+
+  const twitterImage = $('meta[name="twitter:image"]').attr('content');
+  if (twitterImage) addImage(twitterImage, 'Twitter Card Image', null, null, 'twitter:image');
+
+  // 5. SVG images (external via <img src="*.svg"> already caught, check <svg> with meaningful content)
+  // Skip — inline SVGs are usually icons, not content images
+
+  // 6. <figure> images that might use non-standard attributes
+  $('figure img, figure [data-src]').each((_, el) => {
+    const src = $(el).attr('data-src') || $(el).attr('src');
+    if (src) {
+      const caption = $(el).closest('figure').find('figcaption').text()?.trim();
+      addImage(src, caption || $(el).attr('alt')?.trim(), null, null, 'figure');
+    }
+  });
+
+  // 7. Link tags for icons/apple-touch-icon
+  $('link[rel*="icon"], link[rel="apple-touch-icon"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (href) addImage(href, 'Site Icon', null, null, 'favicon');
+  });
+
+  return images.slice(0, 300);
 }
 
 function extractEmails($, html) {
@@ -146,25 +233,72 @@ function extractEmails($, html) {
   ).slice(0, 100);
 }
 
-function extractPhones(html) {
-  // Match various phone formats
-  const phoneRegex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}/g;
-  const telRegex = /tel:([^"'\s]+)/g;
-
+function extractPhones($, html) {
+  // Smart phone extraction — avoids CSS numbers, JS values, timestamps, etc.
   const matches = new Set();
 
-  let m;
-  while ((m = telRegex.exec(html)) !== null) {
-    matches.add(m[1].replace(/[^0-9+\-() ]/g, '').trim());
-  }
-
-  const bodyPhones = html.match(phoneRegex) || [];
-  bodyPhones.forEach(p => {
-    const cleaned = p.trim();
-    if (cleaned.replace(/\D/g, '').length >= 10) {
-      matches.add(cleaned);
+  // 1. Extract from tel: links (most reliable source)
+  $('a[href^="tel:"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (href) {
+      const phone = href.replace('tel:', '').replace(/[^0-9+\-() .]/g, '').trim();
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length >= 7 && digits.length <= 15) {
+        matches.add(phone);
+      }
     }
   });
+
+  // 2. Also check raw HTML for tel: hrefs cheerio might miss
+  const telRegex = /tel:([^"'\s<>]+)/g;
+  let m;
+  while ((m = telRegex.exec(html)) !== null) {
+    const cleaned = m[1].replace(/[^0-9+\-() .]/g, '').trim();
+    const digits = cleaned.replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) {
+      matches.add(cleaned);
+    }
+  }
+
+  // 3. Extract visible text only (strip scripts, styles, and tags)
+  let visibleText = html;
+  visibleText = visibleText.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  visibleText = visibleText.replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  visibleText = visibleText.replace(/<[^>]+>/g, ' ');
+  visibleText = visibleText.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+
+  // 4. Phone patterns that REQUIRE formatting separators
+  const phonePatterns = [
+    // International: +1 (234) 567-8901, +91-9876543210, +44 20 7946 0958
+    /\+\d{1,3}[-\s.]?\(?\d{1,4}\)?[-\s.]?\d{2,4}[-\s.]?\d{2,4}[-\s.]?\d{0,4}/g,
+    // US/CA with parens: (234) 567-8901
+    /\(\d{3}\)\s?\d{3}[-.\s]\d{4}/g,
+    // With explicit separators: 234-567-8901, 234.567.8901, 234 567 8901
+    /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g,
+    // Longer with country: 1-234-567-8901
+    /\b1[-.\s]\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g,
+    // UK style: 020 7946 0958
+    /\b0\d{2,4}[-\s]\d{3,4}[-\s]?\d{3,4}\b/g,
+  ];
+
+  for (const pattern of phonePatterns) {
+    const found = visibleText.match(pattern) || [];
+    for (const p of found) {
+      const cleaned = p.trim();
+      const digits = cleaned.replace(/\D/g, '');
+      // Must be 7-15 digits (valid phone range)
+      if (digits.length < 7 || digits.length > 15) continue;
+      // Reject decimal numbers (CSS values like 1.7999999999)
+      if (/^\d+\.\d+$/.test(cleaned)) continue;
+      // Reject if all leading zeros (like 0000003264)
+      if (/^0{4,}/.test(digits)) continue;
+      // Reject IP addresses
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(cleaned)) continue;
+      // Must have at least one real separator (not just digits)
+      if (!/[-\s.()]/.test(cleaned)) continue;
+      matches.add(cleaned);
+    }
+  }
 
   return [...matches].slice(0, 50);
 }
@@ -760,4 +894,208 @@ function extractVideos($, baseUrl) {
     });
   });
   return videos.slice(0, 30);
+}
+/* ═══════════════════════════════════════════════════
+   SUGGESTIONS ENGINE — Smart improvement recommendations
+   ═══════════════════════════════════════════════════ */
+
+function generateSuggestions($, data, pageUrl) {
+  const suggestions = [];
+
+  const add = (category, priority, title, description, impact) => {
+    suggestions.push({ category, priority, title, description, impact });
+  };
+
+  // ─── SEO Suggestions ──────────────────────────────
+  if (!data.title) {
+    add('seo', 'high', 'Missing Page Title', 'The page has no <title> tag. Search engines use this as the main headline in results. Add a unique, descriptive title (50-60 characters).', 'Critical for search rankings');
+  } else if (data.title.length < 20) {
+    add('seo', 'medium', 'Title Too Short', `Your title "${data.title}" is only ${data.title.length} characters. Aim for 50-60 characters for better SEO visibility.`, 'May reduce click-through rate');
+  } else if (data.title.length > 70) {
+    add('seo', 'low', 'Title Too Long', `Your title is ${data.title.length} characters. Search engines typically truncate after 60 chars. Consider shortening it.`, 'Title may be cut off in search results');
+  }
+
+  if (!data.metaDescription) {
+    add('seo', 'high', 'Missing Meta Description', 'No meta description found. Add a compelling 150-160 character description to improve click-through rates from search results.', 'Major impact on search CTR');
+  } else if (data.metaDescription.length < 70) {
+    add('seo', 'medium', 'Meta Description Too Short', `Your meta description is only ${data.metaDescription.length} characters. Aim for 150-160 characters to maximize search result real estate.`, 'Missed opportunity for search visibility');
+  } else if (data.metaDescription.length > 170) {
+    add('seo', 'low', 'Meta Description Too Long', `Your meta description is ${data.metaDescription.length} characters. It may be truncated in search results. Keep it under 160 characters.`, 'Description may be cut off');
+  }
+
+  const h1Count = (data.headings?.h1 || []).length;
+  if (h1Count === 0) {
+    add('seo', 'high', 'Missing H1 Heading', 'No H1 heading found. Every page should have exactly one H1 that clearly describes the page content.', 'Important ranking signal');
+  } else if (h1Count > 1) {
+    add('seo', 'medium', 'Multiple H1 Headings', `Found ${h1Count} H1 headings. Best practice is to have exactly one H1 per page for clear content hierarchy.`, 'May confuse search engines');
+  }
+
+  const h2Count = (data.headings?.h2 || []).length;
+  if (h1Count > 0 && h2Count === 0 && data.wordCount > 300) {
+    add('seo', 'medium', 'No H2 Subheadings', 'Content has 300+ words but no H2 subheadings. Break content into sections with descriptive H2s for better readability and SEO.', 'Improves content structure');
+  }
+
+  if (!data.metadata?.canonical) {
+    add('seo', 'medium', 'Missing Canonical URL', 'No canonical link tag found. Add <link rel="canonical"> to prevent duplicate content issues.', 'Prevents SEO dilution');
+  }
+
+  if (!data.metadata?.language) {
+    add('seo', 'low', 'Missing Language Attribute', 'The <html> tag has no lang attribute. Add lang="en" (or appropriate language) for accessibility and SEO.', 'Helps search engines serve correct results');
+  }
+
+  const ogKeys = Object.keys(data.metadata?.openGraph || {});
+  if (ogKeys.length === 0) {
+    add('seo', 'medium', 'Missing Open Graph Tags', 'No Open Graph meta tags found. Add og:title, og:description, og:image for better social media sharing previews.', 'Links shared on social media will lack rich previews');
+  } else {
+    if (!data.metadata?.openGraph?.image) {
+      add('seo', 'medium', 'Missing OG Image', 'Open Graph tags exist but no og:image. Social shares will lack a preview image, reducing engagement.', 'Social shares get 2-3x more clicks with images');
+    }
+  }
+
+  const twitterKeys = Object.keys(data.metadata?.twitterCard || {});
+  if (twitterKeys.length === 0 && ogKeys.length === 0) {
+    add('seo', 'low', 'Missing Twitter Card', 'No Twitter Card meta tags found. Add twitter:card, twitter:title, twitter:description for Twitter sharing.', 'Twitter shares will use generic previews');
+  }
+
+  // ─── Accessibility Suggestions ─────────────────────
+  const imagesWithoutAlt = data.images.filter(img => !img.alt && img.source !== 'favicon');
+  if (imagesWithoutAlt.length > 0) {
+    const pct = Math.round((imagesWithoutAlt.length / Math.max(data.images.length, 1)) * 100);
+    add('accessibility', 'high', `${imagesWithoutAlt.length} Images Missing Alt Text`,
+      `${pct}% of images lack alt text. Screen readers can't describe these to visually impaired users. Add descriptive alt attributes to all content images.`,
+      'Required for WCAG compliance');
+  }
+
+  if (!data.metadata?.viewport) {
+    add('accessibility', 'high', 'Missing Viewport Meta Tag', 'No viewport meta tag found. Without it, the page won\'t render properly on mobile devices. Add <meta name="viewport" content="width=device-width, initial-scale=1">.', 'Page will not be mobile-friendly');
+  }
+
+  const formFields = (data.formsData || []).flatMap(f => f.fields || []);
+  const inputsWithoutLabels = formFields.filter(f => !f.id && f.tag === 'input');
+  if (inputsWithoutLabels.length > 0) {
+    add('accessibility', 'medium', 'Form Inputs Missing Labels', `${inputsWithoutLabels.length} form input(s) lack proper IDs, making it hard to associate labels. Add id attributes and matching <label for="..."> elements.`, 'Hurts form usability for assistive tech');
+  }
+
+  // Check for skip navigation
+  const firstLink = $('a').first().attr('href');
+  if (firstLink !== '#main' && firstLink !== '#content' && firstLink !== '#main-content') {
+    add('accessibility', 'low', 'Missing Skip Navigation', 'No "skip to content" link found as the first element. Add one to help keyboard/screen reader users bypass navigation.', 'Improves keyboard navigation');
+  }
+
+  // ─── Performance Suggestions ──────────────────────
+  const externalScripts = data.scripts.filter(s => s.src);
+  const nonAsyncScripts = externalScripts.filter(s => !s.async && !s.defer);
+  if (nonAsyncScripts.length > 3) {
+    add('performance', 'high', `${nonAsyncScripts.length} Render-Blocking Scripts`,
+      `${nonAsyncScripts.length} external scripts load synchronously (no async/defer). This blocks page rendering. Add async or defer attributes to non-critical scripts.`,
+      'Can significantly slow down page load');
+  }
+
+  if (externalScripts.length > 15) {
+    add('performance', 'medium', `Too Many Scripts (${externalScripts.length})`, `Loading ${externalScripts.length} external scripts. Consider bundling, code splitting, or removing unused scripts to reduce HTTP requests.`, 'Each script adds network latency');
+  }
+
+  const externalCSS = data.stylesheets.filter(s => s.type === 'external');
+  if (externalCSS.length > 8) {
+    add('performance', 'medium', `Too Many CSS Files (${externalCSS.length})`, `Loading ${externalCSS.length} external CSS files. Consider combining stylesheets to reduce HTTP requests.`, 'Multiple CSS files delay rendering');
+  }
+
+  const largeImages = data.images.filter(img =>
+    img.src && !img.src.includes('.svg') && !img.src.includes('.webp') && !img.src.includes('.avif')
+  );
+  const nonOptimizedImages = data.images.filter(img =>
+    img.src && (img.src.endsWith('.png') || img.src.endsWith('.jpg') || img.src.endsWith('.jpeg') || img.src.endsWith('.bmp'))
+  );
+  if (nonOptimizedImages.length > 3) {
+    add('performance', 'medium', 'Images Not Using Modern Formats',
+      `${nonOptimizedImages.length} images use older formats (PNG/JPG). Consider converting to WebP or AVIF for 30-50% smaller file sizes.`,
+      'Can dramatically reduce page weight');
+  }
+
+  const imagesWithoutDimensions = data.images.filter(img => !img.width && !img.height && img.source === 'img');
+  if (imagesWithoutDimensions.length > 3) {
+    add('performance', 'low', 'Images Missing Width/Height', `${imagesWithoutDimensions.length} images don't specify width and height attributes. This causes layout shifts (CLS) as images load.`, 'Hurts Core Web Vitals (CLS score)');
+  }
+
+  // ─── Security Suggestions ─────────────────────────
+  const secInfo = data.securityInfo;
+  if (secInfo) {
+    if (secInfo.missingHeaders?.includes('CSP') && !secInfo.headers?.['CSP (meta)']) {
+      add('security', 'high', 'Missing Content Security Policy', 'No CSP header or meta tag detected. CSP helps prevent XSS attacks by controlling which resources the browser loads.', 'Major protection against XSS attacks');
+    }
+    if (secInfo.missingHeaders?.includes('HSTS')) {
+      add('security', 'high', 'Missing HSTS Header', 'Strict-Transport-Security header not found. Without HSTS, users could be downgraded from HTTPS to HTTP.', 'Protects against downgrade attacks');
+    }
+    if (secInfo.missingHeaders?.includes('X-Frame-Options')) {
+      add('security', 'medium', 'Missing X-Frame-Options', 'X-Frame-Options header not set. This leaves the site vulnerable to clickjacking attacks.', 'Prevents clickjacking');
+    }
+    if (secInfo.missingHeaders?.includes('X-Content-Type-Options')) {
+      add('security', 'low', 'Missing X-Content-Type-Options', 'Add X-Content-Type-Options: nosniff to prevent MIME-type sniffing attacks.', 'Prevents MIME confusion attacks');
+    }
+    if (secInfo.missingHeaders?.includes('Referrer-Policy')) {
+      add('security', 'low', 'Missing Referrer Policy', 'No Referrer-Policy header. Set it to control what information is shared when navigating away from your site.', 'Protects user privacy');
+    }
+
+    if ((secInfo.score || 0) < 50) {
+      add('security', 'high', `Low Security Score (${secInfo.score}%)`, `Only ${secInfo.score}% of recommended security headers are present. Implement the missing headers for better protection.`, 'Website is vulnerable to common attacks');
+    }
+  }
+
+  const totalLeaks = data.leakedData?.totalFindings || 0;
+  if (totalLeaks > 0) {
+    add('security', 'high', `${totalLeaks} Potential Data Leak(s)`, 'Sensitive data patterns (API keys, tokens, credentials) were detected in the page source. Review the Leaked Data tab and remove exposed credentials immediately.', 'Exposed credentials can be exploited');
+  }
+
+  if (data.hiddenFields?.length > 5) {
+    add('security', 'low', `${data.hiddenFields.length} Hidden Form Fields`, 'Many hidden form fields found. Ensure they don\'t contain sensitive data like session tokens that could be extracted.', 'Hidden fields are visible in source');
+  }
+
+  // ─── Content Suggestions ──────────────────────────
+  if (data.wordCount < 100) {
+    add('content', 'medium', 'Very Little Content', `Only ${data.wordCount} words on the page. Search engines prefer pages with substantial content (300+ words for blog posts, 500+ for articles).`, 'Thin content ranks poorly');
+  } else if (data.wordCount < 300) {
+    add('content', 'low', 'Content Could Be Longer', `${data.wordCount} words found. Consider expanding to at least 300 words for better SEO potential.`, 'Longer content tends to rank higher');
+  }
+
+  if (data.linksInternal.length === 0) {
+    add('content', 'medium', 'No Internal Links', 'No internal links found on this page. Internal linking helps search engines discover content and distributes page authority.', 'Weakens site structure for SEO');
+  }
+
+  if (data.linksExternal.length === 0 && data.wordCount > 300) {
+    add('content', 'low', 'No External Links', 'No outbound links found. Linking to authoritative external sources can improve credibility and SEO.', 'Minor ranking factor');
+  }
+
+  const brokenImageCount = data.images.filter(img => !img.src || img.src === 'undefined' || img.src === 'null').length;
+  if (brokenImageCount > 0) {
+    add('content', 'medium', `${brokenImageCount} Potentially Broken Images`, 'Some images have invalid or empty src attributes. Check and fix these broken image references.', 'Broken images hurt user experience');
+  }
+
+  if (data.socialLinks.length === 0) {
+    add('content', 'low', 'No Social Media Links', 'No social media profile links found. Adding social links increases trust and provides additional ways for users to connect.', 'Builds brand credibility');
+  }
+
+  if (!data.metadata?.favicon) {
+    add('content', 'low', 'Missing Favicon', 'No favicon found. Add a favicon for better brand recognition in browser tabs and bookmarks.', 'Professional polish');
+  }
+
+  // ─── Technical Suggestions ────────────────────────
+  const jsonLd = data.metadata?.jsonLd || [];
+  if (jsonLd.length === 0) {
+    add('technical', 'medium', 'No Structured Data', 'No JSON-LD structured data found. Add schema.org markup (Organization, Article, Product, etc.) to enable rich search results.', 'Enables rich snippets in Google');
+  }
+
+  if (!pageUrl.startsWith('https://')) {
+    add('technical', 'high', 'Not Using HTTPS', 'The page is served over HTTP, not HTTPS. Switch to HTTPS for security, SEO, and user trust.', 'Google penalizes non-HTTPS sites');
+  }
+
+  const inlineStyles = $('[style]').length;
+  if (inlineStyles > 20) {
+    add('technical', 'low', `${inlineStyles} Inline Styles Found`, 'Many inline styles detected. Move styles to external CSS files for better maintainability and caching.', 'Increases HTML size and hurts caching');
+  }
+
+  // Sort by priority: high first, then medium, then low
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+  return suggestions;
 }
