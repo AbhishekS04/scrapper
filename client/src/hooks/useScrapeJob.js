@@ -1,0 +1,161 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+
+const API_BASE = '/api';
+
+export function useScrapeJob() {
+  const [jobId, setJobId] = useState(null);
+  const [jobData, setJobData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [progress, setProgress] = useState([]);
+  const [status, setStatus] = useState('idle'); // idle, running, completed, failed
+  const [stats, setStats] = useState({ pagesScraped: 0, totalFound: 0, percentage: 0 });
+  const eventSourceRef = useRef(null);
+
+  // Cleanup SSE on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const connectSSE = useCallback((id) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const es = new EventSource(`${API_BASE}/stream/${id}`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        setProgress(prev => {
+          const next = [...prev, data];
+          // Keep last 200 entries
+          return next.length > 200 ? next.slice(-200) : next;
+        });
+
+        if (data.pagesScraped !== undefined) {
+          setStats({
+            pagesScraped: data.pagesScraped,
+            totalFound: data.totalFound || 0,
+            percentage: data.percentage || 0,
+          });
+        }
+
+        if (data.type === 'completed') {
+          setStatus('completed');
+          es.close();
+          // Fetch final results
+          fetchJobResults(id);
+        } else if (data.type === 'failed') {
+          setStatus('failed');
+          setError(data.message || 'Scrape job failed');
+          es.close();
+        } else if (data.type === 'status' && data.status === 'running') {
+          setStatus('running');
+        }
+      } catch {}
+    };
+
+    es.onerror = () => {
+      // Might just be the connection closing after completion
+      if (status !== 'completed') {
+        // Try to fetch results anyway
+        fetchJobResults(id);
+      }
+      es.close();
+    };
+  }, []);
+
+  const fetchJobResults = useCallback(async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/job/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setJobData(data);
+        setStatus(data.job.status);
+        if (data.job.pagesScraped) {
+          setStats(prev => ({
+            ...prev,
+            pagesScraped: data.job.pagesScraped,
+            totalFound: data.job.totalLinksFound,
+            percentage: 100,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch job results:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const startScrape = useCallback(async (url, options = {}) => {
+    setError(null);
+    setLoading(true);
+    setProgress([]);
+    setJobData(null);
+    setStatus('running');
+    setStats({ pagesScraped: 0, totalFound: 0, percentage: 0 });
+
+    try {
+      const res = await fetch(`${API_BASE}/scrape`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, options }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to start scrape');
+      }
+
+      const data = await res.json();
+      setJobId(data.jobId);
+
+      // Connect SSE for live progress
+      connectSSE(data.jobId);
+    } catch (err) {
+      setError(err.message);
+      setStatus('failed');
+      setLoading(false);
+    }
+  }, [connectSSE]);
+
+  const loadJob = useCallback(async (id) => {
+    setError(null);
+    setLoading(true);
+    setJobId(id);
+    setProgress([]);
+    await fetchJobResults(id);
+  }, [fetchJobResults]);
+
+  const reset = useCallback(() => {
+    if (eventSourceRef.current) eventSourceRef.current.close();
+    setJobId(null);
+    setJobData(null);
+    setLoading(false);
+    setError(null);
+    setProgress([]);
+    setStatus('idle');
+    setStats({ pagesScraped: 0, totalFound: 0, percentage: 0 });
+  }, []);
+
+  return {
+    jobId,
+    jobData,
+    loading,
+    error,
+    progress,
+    status,
+    stats,
+    startScrape,
+    loadJob,
+    reset,
+  };
+}

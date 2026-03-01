@@ -1,0 +1,73 @@
+import 'dotenv/config';
+import { neon } from '@neondatabase/serverless';
+
+const sql = neon(process.env.DATABASE_URL);
+
+async function migrate() {
+  console.log('🔄 Running database migrations...');
+
+  try {
+    // Create enum type
+    await sql`
+      DO $$ BEGIN
+        CREATE TYPE job_status AS ENUM ('pending', 'running', 'completed', 'failed');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `;
+
+    // Create scrape_jobs table
+    await sql`
+      CREATE TABLE IF NOT EXISTS scrape_jobs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        url TEXT NOT NULL,
+        status job_status NOT NULL DEFAULT 'pending',
+        options JSONB DEFAULT '{}',
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        pages_scraped INTEGER DEFAULT 0,
+        total_links_found INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
+
+    // Create scrape_results table
+    await sql`
+      CREATE TABLE IF NOT EXISTS scrape_results (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        job_id UUID NOT NULL REFERENCES scrape_jobs(id) ON DELETE CASCADE,
+        page_url TEXT NOT NULL,
+        title TEXT,
+        meta_description TEXT,
+        headings JSONB DEFAULT '{}',
+        paragraphs JSONB DEFAULT '[]',
+        links_internal JSONB DEFAULT '[]',
+        links_external JSONB DEFAULT '[]',
+        images JSONB DEFAULT '[]',
+        emails JSONB DEFAULT '[]',
+        phones JSONB DEFAULT '[]',
+        social_links JSONB DEFAULT '[]',
+        metadata JSONB DEFAULT '{}',
+        tech_stack JSONB DEFAULT '{}',
+        tables_data JSONB DEFAULT '[]',
+        forms_data JSONB DEFAULT '[]',
+        word_count INTEGER DEFAULT 0,
+        load_time_ms INTEGER DEFAULT 0,
+        scraped_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
+
+    // Create indexes
+    await sql`CREATE INDEX IF NOT EXISTS idx_scrape_results_job_id ON scrape_results(job_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_status ON scrape_jobs(status);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_created_at ON scrape_jobs(created_at);`;
+
+    console.log('✅ Database migration completed successfully!');
+  } catch (error) {
+    console.error('❌ Migration failed:', error.message);
+    process.exit(1);
+  }
+}
+
+migrate();

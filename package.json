@@ -1,0 +1,27 @@
+{
+  "name": "scrapeit",
+  "version": "1.0.0",
+  "description": "Full-stack web scraper with React UI, Express backend, Cheerio engine, and NeonDB storage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && node --watch index.js",
+    "dev:client": "cd client && npm run dev",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && node index.js",
+    "db:push": "cd server && node db/migrate.js",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "vercel-build": "cd client && npm install && npm run build"
+  },
+  "keywords": [
+    "web-scraper",
+    "cheerio",
+    "neondb",
+    "scrapeit"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
