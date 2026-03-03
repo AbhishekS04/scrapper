@@ -57,10 +57,10 @@ export default function ExportBar({ jobId, jobData }) {
   }, 0);
 
   return (
-    <div className="w-full max-w-6xl mx-auto mt-6 animate-slide-up">
-      <div className="glass-panel px-5 py-4 flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-300 flex items-center gap-2 font-medium">
+    <div className="w-full max-w-6xl mx-auto mt-4 sm:mt-6 animate-slide-up">
+      <div className="glass-panel px-3 sm:px-5 py-3 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="text-xs sm:text-sm text-gray-300 flex items-center gap-2 font-medium">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
@@ -73,7 +73,7 @@ export default function ExportBar({ jobId, jobData }) {
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           <button onClick={downloadJSON} className="btn-secondary flex items-center gap-2">
             <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />

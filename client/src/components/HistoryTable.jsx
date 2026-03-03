@@ -91,52 +91,90 @@ export default function HistoryTable({ onLoadJob }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>URL</th>
-            <th>Status</th>
-            <th>Pages</th>
-            <th>Links</th>
-            <th>Date</th>
-            <th className="text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jobs.map(job => (
-            <tr key={job.id}>
-              <td>
-                <div className="max-w-xs truncate font-mono text-gray-300">
-                  {job.url}
-                </div>
-              </td>
-              <td><StatusBadge status={job.status} /></td>
-              <td className="font-mono">{job.pagesScraped || 0}</td>
-              <td className="font-mono">{job.totalLinksFound || 0}</td>
-              <td className="text-gray-500 text-xs whitespace-nowrap">{formatDate(job.createdAt)}</td>
-              <td>
-                <div className="flex items-center justify-end gap-2">
-                  {job.status === 'completed' && onLoadJob && (
-                    <button
-                      onClick={() => onLoadJob(job.id)}
-                      className="btn-secondary text-xs py-1 px-3"
-                    >
-                      View
-                    </button>
-                  )}
-                  <button
-                    onClick={() => deleteJob(job.id)}
-                    className="btn-danger text-xs py-1 px-3"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
+    <div>
+      {/* Desktop table */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>URL</th>
+              <th>Status</th>
+              <th>Pages</th>
+              <th>Links</th>
+              <th>Date</th>
+              <th className="text-right">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {jobs.map(job => (
+              <tr key={job.id}>
+                <td>
+                  <div className="max-w-xs truncate font-mono text-gray-300">
+                    {job.url}
+                  </div>
+                </td>
+                <td><StatusBadge status={job.status} /></td>
+                <td className="font-mono">{job.pagesScraped || 0}</td>
+                <td className="font-mono">{job.totalLinksFound || 0}</td>
+                <td className="text-gray-500 text-xs whitespace-nowrap">{formatDate(job.createdAt)}</td>
+                <td>
+                  <div className="flex items-center justify-end gap-2">
+                    {job.status === 'completed' && onLoadJob && (
+                      <button
+                        onClick={() => onLoadJob(job.id)}
+                        className="btn-secondary text-xs py-1 px-3"
+                      >
+                        View
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteJob(job.id)}
+                      className="btn-danger text-xs py-1 px-3"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile card layout */}
+      <div className="sm:hidden space-y-3">
+        {jobs.map(job => (
+          <div key={job.id} className="bg-dark-750 rounded-xl border border-dark-600/30 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="font-mono text-gray-300 text-xs truncate flex-1 min-w-0">
+                {job.url}
+              </div>
+              <StatusBadge status={job.status} />
+            </div>
+            <div className="flex items-center gap-4 text-[11px] text-gray-500 font-mono">
+              <span>{job.pagesScraped || 0} pages</span>
+              <span>{job.totalLinksFound || 0} links</span>
+              <span className="ml-auto">{formatDate(job.createdAt)}</span>
+            </div>
+            <div className="flex items-center gap-2 pt-1 border-t border-dark-600/30">
+              {job.status === 'completed' && onLoadJob && (
+                <button
+                  onClick={() => onLoadJob(job.id)}
+                  className="btn-secondary text-xs py-1.5 px-3 flex-1"
+                >
+                  View
+                </button>
+              )}
+              <button
+                onClick={() => deleteJob(job.id)}
+                className="btn-danger text-xs py-1.5 px-3 flex-1"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

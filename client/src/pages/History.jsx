@@ -32,15 +32,15 @@ export default function History() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-8 px-6">
+    <div className="min-h-[calc(100vh-4rem)] py-4 sm:py-8 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white">Scrape History</h1>
-            <p className="text-gray-500 text-sm mt-1">All past scrape jobs stored in NeonDB</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Scrape History</h1>
+            <p className="text-gray-500 text-xs sm:text-sm mt-1">All past scrape jobs stored in NeonDB</p>
           </div>
-          <button onClick={() => navigate('/')} className="btn-primary text-xs">
+          <button onClick={() => navigate('/')} className="btn-primary text-xs self-start sm:self-auto">
             + New Scrape
           </button>
         </div>
@@ -60,10 +60,10 @@ export default function History() {
 
         {/* Selected job results */}
         {jobData && !loading && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">
-                Results for <span className="text-gray-300 font-mono">{jobData.job.url}</span>
+          <div className="mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <h2 className="text-base sm:text-lg font-semibold text-white">
+                Results for <span className="text-gray-300 font-mono text-sm sm:text-base break-all">{jobData.job.url}</span>
               </h2>
               <button
                 onClick={() => { setSelectedJob(null); setJobData(null); }}
@@ -80,7 +80,7 @@ export default function History() {
         {/* History table */}
         {!jobData && !loading && (
           <div className="glass-panel overflow-hidden">
-            <div className="px-5 py-3 border-b border-dark-600/50">
+            <div className="px-4 sm:px-5 py-3 border-b border-dark-600/50">
               <span className="text-xs font-mono text-gray-400 uppercase tracking-wider">📂 All Jobs</span>
             </div>
             <div className="p-4">

@@ -13,7 +13,7 @@ export default function Home() {
     <div className="min-h-[calc(100vh-4rem)]">
       {/* Hero Section */}
       {showHero && (
-        <div className="relative flex flex-col items-center justify-center pt-24 pb-14 px-6 animate-fade-in">
+        <div className="relative flex flex-col items-center justify-center pt-12 sm:pt-24 pb-8 sm:pb-14 px-4 sm:px-6 animate-fade-in">
           <div className="relative z-10 flex flex-col items-center">
             {/* Logo badge */}
             <div className="relative mb-8">
@@ -24,15 +24,15 @@ export default function Home() {
               </div>
             </div>
 
-            <h1 className="text-5xl md:text-7xl font-black tracking-tight text-center mb-4">
+            <h1 className="text-3xl sm:text-5xl md:text-7xl font-black tracking-tight text-center mb-3 sm:mb-4">
               <span className="text-white">Scrape</span>
               <span className="text-gray-500">It</span>
             </h1>
 
-            <p className="text-gray-400 text-lg md:text-xl mb-2 text-center max-w-2xl">
+            <p className="text-gray-400 text-sm sm:text-lg md:text-xl mb-2 text-center max-w-2xl px-2">
               Web intelligence & data extraction platform
             </p>
-            <p className="text-gray-600 text-sm mb-14 text-center max-w-lg">
+            <p className="text-gray-600 text-xs sm:text-sm mb-8 sm:mb-14 text-center max-w-lg px-2">
               Extract links, images, metadata, contacts, tech stack, security headers, scripts, and more.
             </p>
           </div>
@@ -41,8 +41,8 @@ export default function Home() {
 
       {/* Compact header when scraping */}
       {!showHero && (
-        <div className="pt-8 pb-4 px-6 text-center">
-          <h2 className="text-2xl font-bold text-white mb-1">
+        <div className="pt-4 sm:pt-8 pb-2 sm:pb-4 px-4 sm:px-6 text-center">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">
             Scrape<span className="text-gray-500">It</span>
           </h2>
           {status === 'completed' && (
@@ -57,13 +57,13 @@ export default function Home() {
       )}
 
       {/* URL Input */}
-      <div className="px-6 relative z-10">
+      <div className="px-4 sm:px-6 relative z-10">
         <URLInput onSubmit={startScrape} loading={status === 'running'} />
       </div>
 
       {/* Error */}
       {error && (
-        <div className="max-w-4xl mx-auto mt-6 px-6">
+        <div className="max-w-4xl mx-auto mt-4 sm:mt-6 px-4 sm:px-6">
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-4 text-red-400 text-sm flex items-start gap-3">
             <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -74,13 +74,13 @@ export default function Home() {
       )}
 
       {/* Progress Panel */}
-      <div className="px-6">
+      <div className="px-4 sm:px-6">
         <ProgressPanel progress={progress} stats={stats} status={status} />
       </div>
 
       {/* Results */}
       {jobData && (
-        <div className="px-6 pb-16">
+        <div className="px-4 sm:px-6 pb-12 sm:pb-16">
           <ResultsTabs jobData={jobData} />
           <ExportBar jobId={jobId} jobData={jobData} />
         </div>
@@ -88,8 +88,8 @@ export default function Home() {
 
       {/* Feature cards on hero */}
       {showHero && (
-        <div className="max-w-5xl mx-auto px-6 pt-14 pb-24 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-8 sm:pt-14 pb-16 sm:pb-24 relative z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
             {[
               {
                 icon: '⚡',
@@ -112,16 +112,16 @@ export default function Home() {
                 desc: 'Links, images, scripts, forms, tables, contacts, metadata, tech stack.',
               },
             ].map(card => (
-              <div key={card.title} className="glass-panel-hover p-6 group/card">
-                <div className="text-2xl mb-4 w-12 h-12 rounded-xl flex items-center justify-center bg-white/[0.04]">{card.icon}</div>
-                <h3 className="text-white font-semibold mb-2 text-sm">{card.title}</h3>
-                <p className="text-gray-500 text-xs leading-relaxed">{card.desc}</p>
+              <div key={card.title} className="glass-panel-hover p-4 sm:p-6 group/card">
+                <div className="text-xl sm:text-2xl mb-2 sm:mb-4 w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center bg-white/[0.04]">{card.icon}</div>
+                <h3 className="text-white font-semibold mb-1.5 sm:mb-2 text-xs sm:text-sm">{card.title}</h3>
+                <p className="text-gray-500 text-[10px] sm:text-xs leading-relaxed">{card.desc}</p>
               </div>
             ))}
           </div>
 
           {/* Bottom info bar */}
-          <div className="mt-10 flex items-center justify-center gap-8 text-[11px] text-gray-600">
+          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-[10px] sm:text-[11px] text-gray-600">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
               Deep crawling up to 5 levels

@@ -91,11 +91,11 @@ export default function ResultsTabs({ jobData }) {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto mt-8 animate-slide-up">
+    <div className="w-full max-w-6xl mx-auto mt-4 sm:mt-8 animate-slide-up">
       <div className="glass-panel overflow-hidden">
         {/* Tab bar */}
-        <div className="border-b border-dark-600/50 px-4 pt-3 overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
+        <div className="border-b border-dark-600/50 px-2 sm:px-4 pt-2 sm:pt-3 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-0.5 sm:gap-1 min-w-max">
             {TABS.map(tab => (
               <button
                 key={tab.id}
@@ -119,7 +119,7 @@ export default function ResultsTabs({ jobData }) {
         </div>
 
         {/* Tab content */}
-        <div className="p-6 tab-content-enter" key={activeTab}>
+        <div className="p-3 sm:p-6 tab-content-enter" key={activeTab}>
           {renderTab()}
         </div>
       </div>
@@ -168,8 +168,8 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
           {(firstResult.metaDescription || firstResult.meta_description) && (
             <p className="text-gray-400 text-sm leading-relaxed">{firstResult.metaDescription || firstResult.meta_description}</p>
           )}
-          <div className="flex items-center gap-3 flex-wrap">
-            <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-gray-300 text-sm font-mono hover:underline truncate max-w-lg">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-gray-300 text-xs sm:text-sm font-mono hover:underline truncate max-w-[200px] sm:max-w-lg">
               {job.url}
             </a>
           </div>
@@ -177,11 +177,11 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {stats.map(stat => (
           <div key={stat.label} className={`stat-card border ${stat.bg}`}>
-            <div className="flex items-center gap-2">
-              <div className={`text-2xl font-bold font-mono ${stat.color} animate-count-up`}>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className={`text-lg sm:text-2xl font-bold font-mono ${stat.color} animate-count-up`}>
                 {stat.value}
               </div>
               {stat.badge && (
@@ -196,7 +196,7 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-gray-500 mt-1.5 uppercase tracking-[0.15em]">{stat.label}</div>
+            <div className="text-[9px] sm:text-[10px] text-gray-500 mt-1 sm:mt-1.5 uppercase tracking-[0.15em]">{stat.label}</div>
           </div>
         ))}
       </div>
@@ -215,7 +215,7 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
       )}
 
       {/* Reading stats */}
-      <div className="flex gap-4 text-xs text-gray-500">
+      <div className="flex gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-500 flex-wrap">
         <span>📖 Reading time: <span className="text-gray-300 font-mono">{readingTime} min</span></span>
         <span>📊 {results.length} page{results.length !== 1 ? 's' : ''} analyzed</span>
       </div>
@@ -290,9 +290,9 @@ function SuggestionsTab({ suggestions }) {
   return (
     <div className="space-y-6">
       {/* Health Score Card */}
-      <div className={`rounded-xl border p-5 ${healthBg} flex items-center gap-6`}>
+      <div className={`rounded-xl border p-3 sm:p-5 ${healthBg} flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6`}>
         <div className="flex-shrink-0 text-center">
-          <div className={`text-4xl font-bold font-mono ${healthColor}`}>{healthScore}</div>
+          <div className={`text-3xl sm:text-4xl font-bold font-mono ${healthColor}`}>{healthScore}</div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Health Score</div>
         </div>
         <div className="flex-1">
@@ -311,7 +311,7 @@ function SuggestionsTab({ suggestions }) {
       </div>
 
       {/* Category Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {Object.entries(categoryConfig).map(([key, cfg]) => {
           const count = categoryCounts[key] || 0;
           return (
@@ -457,7 +457,7 @@ function ImagesTab({ images }) {
       {images.length === 0 ? (
         <div className="text-center py-8 text-gray-500 text-sm">No images found</div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {images.slice(0, 60).map((img, i) => (
             <div key={i} className="bg-dark-750 rounded-lg border border-dark-600/30 overflow-hidden group">
               <div className="aspect-video bg-dark-700 flex items-center justify-center overflow-hidden">
@@ -545,7 +545,7 @@ function TextTab({ results }) {
           </div>
 
           {/* Word count */}
-          <div className="flex gap-6 text-sm">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 text-xs sm:text-sm">
             <div>
               <span className="text-gray-500">Word Count: </span>
               <span className="text-white font-mono">{result.wordCount?.toLocaleString() || 0}</span>
@@ -627,7 +627,7 @@ function ContactsTab({ emails, phones, social, contactInfo }) {
           <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
             <span>👤</span> Contact Details Found
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {contactInfo.names?.length > 0 && (
               <div>
                 <span className="text-[10px] text-gray-500 uppercase tracking-wider">Name</span>
@@ -762,8 +762,8 @@ function MetadataTab({ results }) {
   const MetaRow = ({ label, value }) => {
     if (!value || (typeof value === 'object' && Object.keys(value).length === 0)) return null;
     return (
-      <div className="flex items-start gap-4 py-2 border-b border-dark-700/30">
-        <span className="text-xs font-mono text-gray-500 uppercase tracking-wider w-40 flex-shrink-0 pt-0.5">{label}</span>
+      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 py-2 border-b border-dark-700/30">
+        <span className="text-xs font-mono text-gray-500 uppercase tracking-wider sm:w-40 flex-shrink-0 pt-0.5">{label}</span>
         <span className="text-sm text-gray-300 font-mono break-all">
           {typeof value === 'object' ? JSON.stringify(value, null, 2) : value}
         </span>
@@ -862,7 +862,7 @@ function TechTab({ results }) {
   );
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
       <TechSection title="CMS" icon="📦" items={[...aggTech.cms]} color="bg-purple-500/10 text-purple-400 border-purple-500/20" />
       <TechSection title="Frameworks" icon="⚙️" items={[...aggTech.frameworks]} color="bg-blue-500/10 text-blue-400 border-blue-500/20" />
       <TechSection title="Analytics" icon="📊" items={[...aggTech.analytics]} color="bg-yellow-500/10 text-yellow-400 border-yellow-500/20" />
@@ -1000,9 +1000,9 @@ function SecurityTab({ security }) {
   return (
     <div className="space-y-6">
       {/* Score card */}
-      <div className="flex items-center gap-6 bg-dark-750 rounded-2xl p-6 border border-dark-600/30">
+      <div className="flex items-center gap-3 sm:gap-6 bg-dark-750 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-dark-600/30">
         <div className="relative">
-          <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+          <svg className="w-16 h-16 sm:w-24 sm:h-24 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="6" className="text-dark-600" />
             <circle cx="50" cy="50" r="40" fill="none" strokeWidth="6"
               className={scoreColor}
@@ -1011,7 +1011,7 @@ function SecurityTab({ security }) {
               stroke="currentColor"
             />
           </svg>
-          <div className={`absolute inset-0 flex items-center justify-center ${scoreColor} font-bold text-2xl font-mono`}>
+          <div className={`absolute inset-0 flex items-center justify-center ${scoreColor} font-bold text-xl sm:text-2xl font-mono`}>
             {score}
           </div>
         </div>
@@ -1172,14 +1172,14 @@ function ExtrasTab({ comments, hidden, iframes, downloads, videos }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-1.5 sm:gap-2 flex-wrap">
         {sections.map(s => (
           <button
             key={s.key}
             onClick={() => setSection(s.key)}
-            className={`text-xs flex items-center gap-1.5 ${section === s.key ? 'btn-primary' : 'btn-secondary'}`}
+            className={`text-[10px] sm:text-xs flex items-center gap-1 sm:gap-1.5 ${section === s.key ? 'btn-primary' : 'btn-secondary'}`}
           >
-            <span>{s.icon}</span> {s.label} ({s.count})
+            <span>{s.icon}</span> <span className="hidden sm:inline">{s.label}</span> ({s.count})
           </button>
         ))}
       </div>
