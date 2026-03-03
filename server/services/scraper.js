@@ -398,6 +398,10 @@ export async function startScrapeJob(jobId, url, options = {}) {
           suggestions: pageData.suggestions || [],
           contactInfo: pageData.contactInfo || {},
           seoScore: pageData.seoScore || {},
+          // ─── NEW: Performance & Quality Metrics ───
+          performanceMetrics: pageData.performanceMetrics || {},
+          accessibilityScore: pageData.accessibilityScore || {},
+          contentQuality: pageData.contentQuality || {},
         });
 
         pagesScraped++;

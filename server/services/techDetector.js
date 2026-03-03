@@ -1,27 +1,23 @@
 /**
- * Tech Stack Detector
- * Detects CMS, frameworks, analytics, CDN from page HTML and headers
+ * Tech Stack Detector — Enhanced Edition
+ * Detects CMS, frameworks, analytics, CDN, payments, security, and more
  */
 
 const CMS_SIGNATURES = {
   'WordPress': [
-    'wp-content', 'wp-includes', 'wp-json', 'wordpress',
-    'wp-embed', 'woocommerce'
+    'wp-content', 'wp-includes', 'wp-json', 'wordpress', 'wp-embed', 'woocommerce', 'wp-admin'
   ],
   'Shopify': [
-    'cdn.shopify.com', 'shopify.com', 'Shopify.theme',
-    'shopify-section'
+    'cdn.shopify.com', 'shopify.com', 'Shopify.theme', 'shopify-section', 'myshopify.com'
   ],
   'Wix': [
-    'wix.com', 'wixstatic.com', 'X-Wix-',
-    'wix-warmup-data'
+    'wix.com', 'wixstatic.com', 'X-Wix-', 'wix-warmup-data', 'wixsite.com'
   ],
   'Squarespace': [
-    'squarespace.com', 'sqsp.net', 'squarespace-cdn',
-    'sqs-block'
+    'squarespace.com', 'sqsp.net', 'squarespace-cdn', 'sqs-block'
   ],
   'Webflow': [
-    'webflow.com', 'wf-', 'w-layout', 'webflow'
+    'webflow.com', 'wf-', 'w-layout', 'webflow', 'assets.website-files.com'
   ],
   'Drupal': [
     'drupal', 'Drupal.settings', '/sites/default/files'
@@ -30,41 +26,80 @@ const CMS_SIGNATURES = {
     'joomla', '/components/com_', '/media/jui/'
   ],
   'Ghost': [
-    'ghost.org', 'ghost-', 'content/themes'
+    'ghost.org', 'ghost-', 'content/themes', 'ghost.io'
+  ],
+  'Magento': [
+    'mage/', 'magento', 'Mage.', '/skin/frontend/'
+  ],
+  'Contentful': [
+    'contentful.com', 'ctfassets.net'
+  ],
+  'Strapi': [
+    'strapi', '/uploads/', 'strapi.io'
+  ],
+  'Sanity': [
+    'sanity.io', 'cdn.sanity.io'
+  ],
+  'HubSpot': [
+    'hs-scripts.com', 'hubspot', 'hsforms'
   ],
 };
 
 const FRAMEWORK_SIGNATURES = {
   'React': [
     '__NEXT_DATA__', 'react-root', '_reactRootContainer',
-    'data-reactroot', 'react.production', 'react-dom'
+    'data-reactroot', 'react.production', 'react-dom', 'react.development'
   ],
   'Next.js': [
-    '__NEXT_DATA__', '_next/static', 'next/router',
-    '__next', 'next-route-announcer'
+    '__NEXT_DATA__', '_next/static', 'next/router', '__next', 'next-route-announcer'
   ],
   'Vue.js': [
-    '__vue_app__', 'vue.runtime', 'v-cloak',
-    'vue-router', 'data-v-'
+    '__vue_app__', 'vue.runtime', 'v-cloak', 'vue-router', 'data-v-', 'vue.js'
   ],
   'Nuxt': [
     '__NUXT__', '_nuxt/', 'nuxt-link', 'nuxt.config'
   ],
   'Angular': [
-    'ng-version', 'ng-app', 'angular.js',
-    'ng-controller', 'ng-model', 'angular.min.js'
+    'ng-version', 'ng-app', 'angular.js', 'ng-controller', 'ng-model', 'ng-reflect'
   ],
   'Svelte': [
     'svelte', '__svelte', 'svelte-'
   ],
+  'SvelteKit': [
+    '__sveltekit', '_app/immutable'
+  ],
+  'Astro': [
+    'astro-', 'astro-island'
+  ],
+  'Solid.js': [
+    'solid-js', 'solidjs'
+  ],
+  'Qwik': [
+    'qwik', 'q:container'
+  ],
   'jQuery': [
-    'jquery.min.js', 'jquery.js', 'jQuery'
+    'jquery.min.js', 'jquery.js', 'jQuery', 'jquery-'
+  ],
+  'Alpine.js': [
+    'x-data', 'x-show', 'x-bind', 'alpine'
+  ],
+  'HTMX': [
+    'htmx', 'hx-get', 'hx-post', 'hx-trigger'
   ],
   'Bootstrap': [
-    'bootstrap.min.css', 'bootstrap.min.js', 'bootstrap.css'
+    'bootstrap.min.css', 'bootstrap.min.js', 'bootstrap.css', 'btn-primary'
   ],
   'Tailwind CSS': [
-    'tailwindcss', 'tailwind.min.css'
+    'tailwindcss', 'tailwind.min.css', 'tailwind.config'
+  ],
+  'Bulma': [
+    'bulma', 'bulma.min.css'
+  ],
+  'Material UI': [
+    'mui', 'material-ui', 'MuiButton'
+  ],
+  'Chakra UI': [
+    'chakra', 'chakra-ui'
   ],
   'Gatsby': [
     'gatsby-', '__gatsby', 'gatsby-image'

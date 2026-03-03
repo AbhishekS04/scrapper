@@ -49,5 +49,9 @@ export const scrapeResults = pgTable('scrape_results', {
   suggestions: jsonb('suggestions').default([]),
   contactInfo: jsonb('contact_info').default({}),
   seoScore: jsonb('seo_score').default({}),
+  // ─── NEW: Performance & Quality Metrics ───
+  performanceMetrics: jsonb('performance_metrics').default({}),
+  accessibilityScore: jsonb('accessibility_score').default({}),
+  contentQuality: jsonb('content_quality').default({}),
   scrapedAt: timestamp('scraped_at').defaultNow().notNull(),
 });

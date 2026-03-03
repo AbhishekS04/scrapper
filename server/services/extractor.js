@@ -40,6 +40,10 @@ export function extractPageData(html, pageUrl, headers = {}) {
     iframes: extractIframes($, baseUrl),
     downloads: extractDownloadables($, baseUrl),
     videos: extractVideos($, baseUrl),
+    // ─── NEW: Performance & Quality Metrics ───
+    performanceMetrics: extractPerformanceMetrics($, html, headers),
+    accessibilityScore: calculateAccessibilityScore($),
+    contentQuality: analyzeContentQuality($, html),
   };
 
   // Generate suggestions based on all extracted data
@@ -1250,6 +1254,534 @@ function extractVideos($, baseUrl) {
   });
   return videos.slice(0, 30);
 }
+
+/* ═══════════════════════════════════════════════════
+   PERFORMANCE METRICS — Page load & optimization analysis
+   ═══════════════════════════════════════════════════ */
+
+function extractPerformanceMetrics($, html, headers = {}) {
+  const metrics = {
+    // Size metrics
+    htmlSize: html.length,
+    htmlSizeKB: Math.round(html.length / 1024 * 100) / 100,
+    
+    // Resource counts
+    totalScripts: $('script').length,
+    externalScripts: $('script[src]').length,
+    inlineScripts: $('script:not([src])').length,
+    asyncScripts: $('script[async]').length,
+    deferScripts: $('script[defer]').length,
+    renderBlockingScripts: $('script[src]:not([async]):not([defer])').length,
+    
+    totalStylesheets: $('link[rel="stylesheet"]').length,
+    inlineStyles: $('style').length,
+    inlineStyleAttributes: $('[style]').length,
+    
+    totalImages: $('img').length,
+    lazyImages: $('img[loading="lazy"]').length,
+    imagesWithDimensions: $('img[width][height]').length,
+    
+    totalIframes: $('iframe').length,
+    
+    // DOM complexity
+    domElements: $('*').length,
+    domDepth: calculateDOMDepth($),
+    
+    // Fonts
+    fontFaces: (html.match(/@font-face/gi) || []).length,
+    googleFonts: $('link[href*="fonts.googleapis.com"]').length,
+    
+    // Preload/prefetch
+    preloadLinks: $('link[rel="preload"]').length,
+    prefetchLinks: $('link[rel="prefetch"]').length,
+    preconnectLinks: $('link[rel="preconnect"]').length,
+    dnsPrefetch: $('link[rel="dns-prefetch"]').length,
+    
+    // Headers
+    cacheControl: headers['cache-control'] || null,
+    contentEncoding: headers['content-encoding'] || null,
+    
+    // Estimated scores
+    estimatedScore: 0,
+    issues: [],
+    optimizations: [],
+  };
+
+  // Calculate estimated performance score
+  let score = 100;
+  const issues = [];
+  const optimizations = [];
+
+  // HTML size analysis
+  if (metrics.htmlSizeKB > 500) {
+    score -= 15;
+    issues.push({ type: 'size', message: `Large HTML (${metrics.htmlSizeKB}KB)`, impact: 'high' });
+  } else if (metrics.htmlSizeKB > 200) {
+    score -= 8;
+    issues.push({ type: 'size', message: `HTML could be smaller (${metrics.htmlSizeKB}KB)`, impact: 'medium' });
+  } else if (metrics.htmlSizeKB < 50) {
+    optimizations.push('Compact HTML size');
+  }
+
+  // Script analysis
+  if (metrics.renderBlockingScripts > 5) {
+    score -= 15;
+    issues.push({ type: 'scripts', message: `${metrics.renderBlockingScripts} render-blocking scripts`, impact: 'high' });
+  } else if (metrics.renderBlockingScripts > 2) {
+    score -= 8;
+    issues.push({ type: 'scripts', message: `${metrics.renderBlockingScripts} render-blocking scripts`, impact: 'medium' });
+  }
+
+  if (metrics.externalScripts > 20) {
+    score -= 10;
+    issues.push({ type: 'scripts', message: `Too many external scripts (${metrics.externalScripts})`, impact: 'high' });
+  }
+
+  if (metrics.asyncScripts > 0 || metrics.deferScripts > 0) {
+    optimizations.push(`Using async/defer loading (${metrics.asyncScripts + metrics.deferScripts} scripts)`);
+  }
+
+  // Image analysis
+  if (metrics.totalImages > 0) {
+    const lazyPercentage = (metrics.lazyImages / metrics.totalImages) * 100;
+    if (lazyPercentage > 50) {
+      optimizations.push(`Images use lazy loading (${Math.round(lazyPercentage)}%)`);
+    } else if (metrics.totalImages > 5 && lazyPercentage < 30) {
+      score -= 5;
+      issues.push({ type: 'images', message: 'Most images not lazy-loaded', impact: 'medium' });
+    }
+
+    const dimensionPercentage = (metrics.imagesWithDimensions / metrics.totalImages) * 100;
+    if (dimensionPercentage > 80) {
+      optimizations.push('Images have explicit dimensions');
+    } else if (dimensionPercentage < 30) {
+      score -= 5;
+      issues.push({ type: 'images', message: 'Images missing width/height (causes layout shift)', impact: 'medium' });
+    }
+  }
+
+  // DOM complexity
+  if (metrics.domElements > 3000) {
+    score -= 10;
+    issues.push({ type: 'dom', message: `Very large DOM (${metrics.domElements} elements)`, impact: 'high' });
+  } else if (metrics.domElements > 1500) {
+    score -= 5;
+    issues.push({ type: 'dom', message: `Large DOM (${metrics.domElements} elements)`, impact: 'medium' });
+  } else if (metrics.domElements < 500) {
+    optimizations.push('Lean DOM structure');
+  }
+
+  if (metrics.domDepth > 20) {
+    score -= 5;
+    issues.push({ type: 'dom', message: `Deep DOM nesting (${metrics.domDepth} levels)`, impact: 'medium' });
+  }
+
+  // Resource hints
+  if (metrics.preloadLinks > 0 || metrics.preconnectLinks > 0) {
+    optimizations.push('Uses resource hints (preload/preconnect)');
+  }
+
+  // Caching
+  if (metrics.cacheControl && metrics.cacheControl.includes('max-age')) {
+    optimizations.push('Has cache-control headers');
+  }
+
+  // Compression
+  if (metrics.contentEncoding && (metrics.contentEncoding.includes('gzip') || metrics.contentEncoding.includes('br'))) {
+    optimizations.push(`Compression enabled (${metrics.contentEncoding})`);
+  }
+
+  // Inline styles penalty
+  if (metrics.inlineStyleAttributes > 50) {
+    score -= 5;
+    issues.push({ type: 'styles', message: `Many inline styles (${metrics.inlineStyleAttributes})`, impact: 'low' });
+  }
+
+  metrics.estimatedScore = Math.max(0, Math.min(100, Math.round(score)));
+  metrics.issues = issues;
+  metrics.optimizations = optimizations;
+  metrics.grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+
+  return metrics;
+}
+
+function calculateDOMDepth($) {
+  let maxDepth = 0;
+  function traverse(el, depth) {
+    if (depth > maxDepth) maxDepth = depth;
+    $(el).children().each((_, child) => traverse(child, depth + 1));
+  }
+  traverse($('html'), 0);
+  return Math.min(maxDepth, 50); // Cap at 50 for performance
+}
+
+/* ═══════════════════════════════════════════════════
+   ACCESSIBILITY SCORE — WCAG compliance analysis
+   ═══════════════════════════════════════════════════ */
+
+function calculateAccessibilityScore($) {
+  let score = 100;
+  const issues = [];
+  const passes = [];
+
+  // ─── Images ───
+  const images = $('img');
+  const imagesWithAlt = $('img[alt]').length;
+  const imagesWithEmptyAlt = $('img[alt=""]').length;
+  const totalImages = images.length;
+  
+  if (totalImages > 0) {
+    const missingAlt = totalImages - imagesWithAlt;
+    if (missingAlt > 0) {
+      const penalty = Math.min(20, missingAlt * 3);
+      score -= penalty;
+      issues.push({ rule: 'img-alt', message: `${missingAlt} images missing alt attribute`, severity: 'critical', wcag: '1.1.1' });
+    } else {
+      passes.push({ rule: 'img-alt', message: 'All images have alt attributes' });
+    }
+  }
+
+  // ─── Page Language ───
+  const htmlLang = $('html').attr('lang');
+  if (!htmlLang) {
+    score -= 10;
+    issues.push({ rule: 'html-lang', message: 'Missing lang attribute on <html>', severity: 'critical', wcag: '3.1.1' });
+  } else {
+    passes.push({ rule: 'html-lang', message: `Page language defined (${htmlLang})` });
+  }
+
+  // ─── Page Title ───
+  const title = $('title').text().trim();
+  if (!title) {
+    score -= 10;
+    issues.push({ rule: 'page-title', message: 'Missing page title', severity: 'critical', wcag: '2.4.2' });
+  } else {
+    passes.push({ rule: 'page-title', message: 'Page has a title' });
+  }
+
+  // ─── Headings ───
+  const h1Count = $('h1').length;
+  if (h1Count === 0) {
+    score -= 8;
+    issues.push({ rule: 'h1-presence', message: 'Missing H1 heading', severity: 'serious', wcag: '1.3.1' });
+  } else if (h1Count > 1) {
+    score -= 3;
+    issues.push({ rule: 'h1-multiple', message: `Multiple H1 headings (${h1Count})`, severity: 'moderate', wcag: '1.3.1' });
+  } else {
+    passes.push({ rule: 'h1-presence', message: 'Single H1 heading present' });
+  }
+
+  // Check heading order
+  let lastHeadingLevel = 0;
+  let headingSkipFound = false;
+  $('h1, h2, h3, h4, h5, h6').each((_, el) => {
+    const level = parseInt(el.tagName.replace('H', ''));
+    if (level > lastHeadingLevel + 1 && lastHeadingLevel > 0) {
+      headingSkipFound = true;
+    }
+    lastHeadingLevel = level;
+  });
+  if (headingSkipFound) {
+    score -= 5;
+    issues.push({ rule: 'heading-order', message: 'Heading levels are skipped', severity: 'moderate', wcag: '1.3.1' });
+  }
+
+  // ─── Links ───
+  const emptyLinks = $('a:not([href]), a[href=""], a[href="#"]').length;
+  if (emptyLinks > 0) {
+    score -= Math.min(10, emptyLinks * 2);
+    issues.push({ rule: 'link-valid', message: `${emptyLinks} empty or invalid links`, severity: 'moderate', wcag: '2.4.4' });
+  }
+
+  const linksWithText = $('a').filter((_, el) => {
+    const text = $(el).text().trim();
+    const ariaLabel = $(el).attr('aria-label');
+    const hasImage = $(el).find('img[alt]').length > 0;
+    return text || ariaLabel || hasImage;
+  }).length;
+  const totalLinks = $('a[href]').length;
+  if (totalLinks > 0) {
+    const linksWithoutText = totalLinks - linksWithText;
+    if (linksWithoutText > 0) {
+      score -= Math.min(10, linksWithoutText * 2);
+      issues.push({ rule: 'link-name', message: `${linksWithoutText} links have no accessible name`, severity: 'serious', wcag: '2.4.4' });
+    }
+  }
+
+  // ─── Forms ───
+  const inputs = $('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"])');
+  const inputsWithLabels = inputs.filter((_, el) => {
+    const id = $(el).attr('id');
+    const ariaLabel = $(el).attr('aria-label');
+    const ariaLabelledby = $(el).attr('aria-labelledby');
+    const placeholder = $(el).attr('placeholder');
+    const hasLabel = id && $(`label[for="${id}"]`).length > 0;
+    return hasLabel || ariaLabel || ariaLabelledby;
+  }).length;
+  
+  if (inputs.length > 0) {
+    const unlabeledInputs = inputs.length - inputsWithLabels;
+    if (unlabeledInputs > 0) {
+      score -= Math.min(15, unlabeledInputs * 3);
+      issues.push({ rule: 'input-label', message: `${unlabeledInputs} form inputs without labels`, severity: 'critical', wcag: '1.3.1' });
+    } else {
+      passes.push({ rule: 'input-label', message: 'All form inputs have labels' });
+    }
+  }
+
+  // ─── Buttons ───
+  const buttonsWithoutText = $('button').filter((_, el) => {
+    const text = $(el).text().trim();
+    const ariaLabel = $(el).attr('aria-label');
+    const title = $(el).attr('title');
+    return !text && !ariaLabel && !title;
+  }).length;
+  if (buttonsWithoutText > 0) {
+    score -= Math.min(10, buttonsWithoutText * 2);
+    issues.push({ rule: 'button-name', message: `${buttonsWithoutText} buttons without accessible name`, severity: 'critical', wcag: '4.1.2' });
+  }
+
+  // ─── ARIA ───
+  const ariaRoles = $('[role]').length;
+  const ariaLabels = $('[aria-label], [aria-labelledby], [aria-describedby]').length;
+  if (ariaRoles > 0 || ariaLabels > 0) {
+    passes.push({ rule: 'aria-usage', message: `Uses ARIA attributes (${ariaRoles} roles, ${ariaLabels} labels)` });
+  }
+
+  // ─── Landmarks ───
+  const hasMain = $('main, [role="main"]').length > 0;
+  const hasNav = $('nav, [role="navigation"]').length > 0;
+  const hasHeader = $('header, [role="banner"]').length > 0;
+  const hasFooter = $('footer, [role="contentinfo"]').length > 0;
+  
+  if (!hasMain) {
+    score -= 5;
+    issues.push({ rule: 'landmark-main', message: 'Missing main landmark', severity: 'moderate', wcag: '1.3.1' });
+  } else {
+    passes.push({ rule: 'landmark-main', message: 'Has main landmark' });
+  }
+
+  const landmarkCount = [hasMain, hasNav, hasHeader, hasFooter].filter(Boolean).length;
+  if (landmarkCount >= 3) {
+    passes.push({ rule: 'landmarks', message: 'Good use of landmarks' });
+  }
+
+  // ─── Skip Link ───
+  const hasSkipLink = $('a[href="#main"], a[href="#content"], a[href="#main-content"], .skip-link, .skip-nav, a:contains("Skip")').first();
+  if (hasSkipLink.length > 0) {
+    passes.push({ rule: 'skip-link', message: 'Has skip navigation link' });
+  } else if ($('nav').length > 0) {
+    score -= 3;
+    issues.push({ rule: 'skip-link', message: 'Missing skip navigation link', severity: 'moderate', wcag: '2.4.1' });
+  }
+
+  // ─── Color Contrast (basic check) ───
+  // We can't fully check contrast without rendering, but we can flag potential issues
+  const potentialContrastIssues = $('[style*="color"][style*="background"]').length;
+  if (potentialContrastIssues > 10) {
+    issues.push({ rule: 'color-contrast', message: 'Many inline color styles (verify contrast)', severity: 'needs-review', wcag: '1.4.3' });
+  }
+
+  // ─── Focus Management ───
+  const tabindexNegative = $('[tabindex="-1"]').length;
+  const tabindexPositive = $('[tabindex]').filter((_, el) => {
+    const val = parseInt($(el).attr('tabindex'));
+    return val > 0;
+  }).length;
+  
+  if (tabindexPositive > 0) {
+    score -= 3;
+    issues.push({ rule: 'tabindex-positive', message: `${tabindexPositive} elements with positive tabindex`, severity: 'moderate', wcag: '2.4.3' });
+  }
+
+  // ─── Video/Audio ───
+  const mediaElements = $('video, audio').length;
+  const mediaWithCaptions = $('video track[kind="captions"], video track[kind="subtitles"]').length;
+  if (mediaElements > 0 && mediaWithCaptions === 0) {
+    score -= 5;
+    issues.push({ rule: 'media-captions', message: 'Media elements without captions/subtitles', severity: 'serious', wcag: '1.2.2' });
+  }
+
+  // Calculate final score
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  
+  let grade;
+  if (score >= 90) grade = 'A';
+  else if (score >= 80) grade = 'B';
+  else if (score >= 70) grade = 'C';
+  else if (score >= 60) grade = 'D';
+  else grade = 'F';
+
+  return {
+    score,
+    grade,
+    issues,
+    passes,
+    summary: {
+      critical: issues.filter(i => i.severity === 'critical').length,
+      serious: issues.filter(i => i.severity === 'serious').length,
+      moderate: issues.filter(i => i.severity === 'moderate').length,
+      passes: passes.length,
+    }
+  };
+}
+
+/* ═══════════════════════════════════════════════════
+   CONTENT QUALITY ANALYSIS — Readability & structure
+   ═══════════════════════════════════════════════════ */
+
+function analyzeContentQuality($, html) {
+  // Extract clean text content
+  const $clone = $.root().clone();
+  $clone.find('script, style, noscript, svg, code, pre, nav, footer, header').remove();
+  const text = $clone.find('body').text().replace(/\s+/g, ' ').trim();
+  
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 5);
+  const paragraphs = $('p').filter((_, el) => $(el).text().trim().length > 20).length;
+  
+  // Word statistics
+  const wordCount = words.length;
+  const avgWordLength = wordCount > 0 
+    ? Math.round(words.reduce((sum, w) => sum + w.length, 0) / wordCount * 10) / 10 
+    : 0;
+  
+  // Sentence statistics
+  const sentenceCount = sentences.length;
+  const avgSentenceLength = sentenceCount > 0
+    ? Math.round(words.length / sentenceCount * 10) / 10
+    : 0;
+
+  // Flesch Reading Ease approximation
+  const syllableCount = words.reduce((sum, word) => sum + countSyllables(word), 0);
+  const fleschScore = sentenceCount > 0 && wordCount > 0
+    ? Math.round(206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount))
+    : 0;
+  
+  // Clamp Flesch score
+  const clampedFlesch = Math.max(0, Math.min(100, fleschScore));
+
+  // Reading level
+  let readingLevel;
+  if (clampedFlesch >= 90) readingLevel = '5th grade';
+  else if (clampedFlesch >= 80) readingLevel = '6th grade';
+  else if (clampedFlesch >= 70) readingLevel = '7th grade';
+  else if (clampedFlesch >= 60) readingLevel = '8th-9th grade';
+  else if (clampedFlesch >= 50) readingLevel = '10th-12th grade';
+  else if (clampedFlesch >= 30) readingLevel = 'College';
+  else readingLevel = 'College graduate';
+
+  // Reading time
+  const readingTimeMinutes = Math.max(1, Math.round(wordCount / 200));
+
+  // Content structure analysis
+  const h1Count = $('h1').length;
+  const h2Count = $('h2').length;
+  const h3Count = $('h3').length;
+  const listCount = $('ul, ol').length;
+  const listItems = $('li').length;
+  const tableCount = $('table').length;
+  const imageCount = $('img').length;
+  const videoCount = $('video, iframe[src*="youtube"], iframe[src*="vimeo"]').length;
+  const codeBlockCount = $('code, pre').length;
+  const blockquoteCount = $('blockquote').length;
+
+  // Keyword density (top words)
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'it', 'its', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'we', 'they', 'what', 'which', 'who', 'whom', 'whose', 'where', 'when', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'also']);
+  
+  const wordFreq = {};
+  words.forEach(word => {
+    const lower = word.toLowerCase().replace(/[^a-z]/g, '');
+    if (lower.length > 3 && !stopWords.has(lower)) {
+      wordFreq[lower] = (wordFreq[lower] || 0) + 1;
+    }
+  });
+  
+  const topKeywords = Object.entries(wordFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([word, count]) => ({
+      word,
+      count,
+      density: Math.round((count / wordCount) * 1000) / 10
+    }));
+
+  // Content score
+  let contentScore = 50; // Base score
+  
+  // Word count scoring
+  if (wordCount >= 1000) contentScore += 20;
+  else if (wordCount >= 500) contentScore += 15;
+  else if (wordCount >= 300) contentScore += 10;
+  else if (wordCount >= 100) contentScore += 5;
+  else contentScore -= 10;
+
+  // Structure scoring
+  if (h1Count === 1) contentScore += 5;
+  if (h2Count >= 2) contentScore += 5;
+  if (paragraphs >= 3) contentScore += 5;
+  if (listCount > 0) contentScore += 3;
+  if (imageCount > 0) contentScore += 5;
+
+  // Readability scoring
+  if (clampedFlesch >= 60) contentScore += 5;
+  else if (clampedFlesch < 30) contentScore -= 5;
+
+  contentScore = Math.max(0, Math.min(100, contentScore));
+
+  // Determine grade
+  let grade;
+  if (contentScore >= 85) grade = 'A';
+  else if (contentScore >= 70) grade = 'B';
+  else if (contentScore >= 55) grade = 'C';
+  else if (contentScore >= 40) grade = 'D';
+  else grade = 'F';
+
+  return {
+    score: contentScore,
+    grade,
+    
+    // Text statistics
+    wordCount,
+    sentenceCount,
+    paragraphCount: paragraphs,
+    avgWordLength,
+    avgSentenceLength,
+    readingTimeMinutes,
+    
+    // Readability
+    fleschScore: clampedFlesch,
+    readingLevel,
+    
+    // Structure
+    structure: {
+      headings: { h1: h1Count, h2: h2Count, h3: h3Count },
+      lists: listCount,
+      listItems,
+      tables: tableCount,
+      images: imageCount,
+      videos: videoCount,
+      codeBlocks: codeBlockCount,
+      blockquotes: blockquoteCount,
+    },
+    
+    // Keywords
+    topKeywords,
+  };
+}
+
+// Helper: Count syllables in a word (approximation)
+function countSyllables(word) {
+  word = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (word.length <= 3) return 1;
+  
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+  word = word.replace(/^y/, '');
+  
+  const syllables = word.match(/[aeiouy]{1,2}/g);
+  return syllables ? syllables.length : 1;
+}
+
 /* ═══════════════════════════════════════════════════
    SUGGESTIONS ENGINE — Smart improvement recommendations
    ═══════════════════════════════════════════════════ */
@@ -1461,131 +1993,366 @@ function generateSuggestions($, data, pageUrl) {
 function calculateSEOScore($, data) {
   let score = 100;
   const deductions = [];
+  const bonuses = [];
 
-  // ─── Title Analysis (max -20) ───
+  // ═══════════════════════════════════════════════════
+  // TITLE ANALYSIS (max -15)
+  // ═══════════════════════════════════════════════════
   if (!data.title) {
-    score -= 20;
-    deductions.push({ reason: 'Missing title', points: -20 });
-  } else {
-    if (data.title.length < 20) {
-      score -= 10;
-      deductions.push({ reason: 'Title too short', points: -10 });
-    } else if (data.title.length > 70) {
-      score -= 5;
-      deductions.push({ reason: 'Title too long', points: -5 });
-    }
-  }
-
-  // ─── Meta Description (max -15) ───
-  if (!data.metaDescription) {
     score -= 15;
-    deductions.push({ reason: 'Missing meta description', points: -15 });
+    deductions.push({ category: 'title', reason: 'Missing title tag', points: -15, severity: 'critical' });
   } else {
-    if (data.metaDescription.length < 70) {
-      score -= 7;
-      deductions.push({ reason: 'Meta description too short', points: -7 });
-    } else if (data.metaDescription.length > 160) {
+    const titleLen = data.title.length;
+    if (titleLen < 20) {
+      score -= 8;
+      deductions.push({ category: 'title', reason: `Title too short (${titleLen} chars)`, points: -8, severity: 'high' });
+    } else if (titleLen < 30) {
+      score -= 4;
+      deductions.push({ category: 'title', reason: `Title could be longer (${titleLen} chars)`, points: -4, severity: 'medium' });
+    } else if (titleLen > 70) {
       score -= 3;
-      deductions.push({ reason: 'Meta description too long', points: -3 });
+      deductions.push({ category: 'title', reason: `Title may be truncated (${titleLen} chars)`, points: -3, severity: 'low' });
+    } else if (titleLen >= 50 && titleLen <= 60) {
+      score += 2;
+      bonuses.push({ category: 'title', reason: 'Perfect title length', points: +2 });
     }
   }
 
-  // ─── Headings Structure (max -15) ───
+  // ═══════════════════════════════════════════════════
+  // META DESCRIPTION (max -12)
+  // ═══════════════════════════════════════════════════
+  if (!data.metaDescription) {
+    score -= 12;
+    deductions.push({ category: 'meta', reason: 'Missing meta description', points: -12, severity: 'critical' });
+  } else {
+    const descLen = data.metaDescription.length;
+    if (descLen < 70) {
+      score -= 6;
+      deductions.push({ category: 'meta', reason: `Meta description too short (${descLen} chars)`, points: -6, severity: 'high' });
+    } else if (descLen > 160) {
+      score -= 2;
+      deductions.push({ category: 'meta', reason: `Meta description may be truncated (${descLen} chars)`, points: -2, severity: 'low' });
+    } else if (descLen >= 140 && descLen <= 160) {
+      score += 2;
+      bonuses.push({ category: 'meta', reason: 'Optimal meta description length', points: +2 });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // HEADING STRUCTURE (max -12)
+  // ═══════════════════════════════════════════════════
   const h1Count = data.headings?.h1?.length || 0;
   const h2Count = data.headings?.h2?.length || 0;
+  const h3Count = data.headings?.h3?.length || 0;
   
   if (h1Count === 0) {
     score -= 10;
-    deductions.push({ reason: 'Missing H1 heading', points: -10 });
+    deductions.push({ category: 'headings', reason: 'Missing H1 heading', points: -10, severity: 'critical' });
   } else if (h1Count > 1) {
-    score -= 5;
-    deductions.push({ reason: 'Multiple H1 headings', points: -5 });
+    score -= 4;
+    deductions.push({ category: 'headings', reason: `Multiple H1 headings (${h1Count})`, points: -4, severity: 'medium' });
+  } else {
+    score += 2;
+    bonuses.push({ category: 'headings', reason: 'Single H1 heading', points: +2 });
   }
   
-  if (h2Count === 0 && data.wordCount > 100) {
-    score -= 5;
-    deductions.push({ reason: 'No H2 subheadings', points: -5 });
+  if (h2Count === 0 && data.wordCount > 150) {
+    score -= 4;
+    deductions.push({ category: 'headings', reason: 'No H2 subheadings for long content', points: -4, severity: 'medium' });
+  } else if (h2Count >= 2 && h2Count <= 8) {
+    score += 2;
+    bonuses.push({ category: 'headings', reason: 'Good heading structure', points: +2 });
   }
 
-  // ─── Content Quality (max -15) ───
-  if (data.wordCount < 50) {
-    score -= 15;
-    deductions.push({ reason: 'Very thin content', points: -15 });
-  } else if (data.wordCount < 150) {
-    score -= 10;
-    deductions.push({ reason: 'Low word count', points: -10 });
-  } else if (data.wordCount < 300) {
-    score -= 5;
-    deductions.push({ reason: 'Could use more content', points: -5 });
+  // Check heading hierarchy
+  if (h3Count > 0 && h2Count === 0) {
+    score -= 2;
+    deductions.push({ category: 'headings', reason: 'H3 without H2 (broken hierarchy)', points: -2, severity: 'low' });
   }
 
-  // ─── Images (max -10) ───
+  // ═══════════════════════════════════════════════════
+  // CONTENT QUALITY (max -15)
+  // ═══════════════════════════════════════════════════
+  const wordCount = data.wordCount || 0;
+  
+  if (wordCount < 50) {
+    score -= 12;
+    deductions.push({ category: 'content', reason: `Very thin content (${wordCount} words)`, points: -12, severity: 'critical' });
+  } else if (wordCount < 150) {
+    score -= 8;
+    deductions.push({ category: 'content', reason: `Low word count (${wordCount} words)`, points: -8, severity: 'high' });
+  } else if (wordCount < 300) {
+    score -= 4;
+    deductions.push({ category: 'content', reason: `Could use more content (${wordCount} words)`, points: -4, severity: 'medium' });
+  } else if (wordCount >= 500) {
+    score += 3;
+    bonuses.push({ category: 'content', reason: `Substantial content (${wordCount} words)`, points: +3 });
+  }
+
+  // Paragraph analysis
+  const paragraphs = data.paragraphs || [];
+  const avgParagraphLength = paragraphs.length > 0 
+    ? paragraphs.reduce((sum, p) => sum + p.length, 0) / paragraphs.length 
+    : 0;
+  
+  if (paragraphs.length >= 3 && avgParagraphLength >= 50) {
+    score += 2;
+    bonuses.push({ category: 'content', reason: 'Well-structured paragraphs', points: +2 });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // IMAGE OPTIMIZATION (max -10)
+  // ═══════════════════════════════════════════════════
   const images = data.images || [];
-  const imagesWithoutAlt = images.filter(img => !img.alt || img.alt.trim() === '').length;
   const totalImages = images.length;
   
   if (totalImages > 0) {
-    const percentWithoutAlt = (imagesWithoutAlt / totalImages) * 100;
-    if (percentWithoutAlt > 50) {
-      score -= 10;
-      deductions.push({ reason: 'Most images missing alt text', points: -10 });
-    } else if (percentWithoutAlt > 25) {
-      score -= 5;
-      deductions.push({ reason: 'Some images missing alt text', points: -5 });
+    const imagesWithAlt = images.filter(img => img.alt && img.alt.trim().length > 0).length;
+    const altPercentage = (imagesWithAlt / totalImages) * 100;
+    
+    if (altPercentage < 50) {
+      score -= 8;
+      deductions.push({ category: 'images', reason: `Most images missing alt text (${Math.round(altPercentage)}%)`, points: -8, severity: 'high' });
+    } else if (altPercentage < 80) {
+      score -= 4;
+      deductions.push({ category: 'images', reason: `Some images missing alt text (${Math.round(altPercentage)}%)`, points: -4, severity: 'medium' });
+    } else if (altPercentage === 100) {
+      score += 3;
+      bonuses.push({ category: 'images', reason: 'All images have alt text', points: +3 });
     }
+
+    // Check for lazy loading
+    const lazyImages = images.filter(img => img.source === 'img' || img.source === 'srcset').length;
+    if (lazyImages > 5) {
+      const hasLazyLoad = $('img[loading="lazy"]').length > 0 || $('img[data-src]').length > 0;
+      if (!hasLazyLoad) {
+        score -= 2;
+        deductions.push({ category: 'images', reason: 'Many images without lazy loading', points: -2, severity: 'low' });
+      }
+    }
+  } else if (wordCount > 300) {
+    score -= 2;
+    deductions.push({ category: 'images', reason: 'No images for content-heavy page', points: -2, severity: 'low' });
   }
 
-  // ─── Links (max -10) ───
+  // ═══════════════════════════════════════════════════
+  // LINK STRUCTURE (max -8)
+  // ═══════════════════════════════════════════════════
   const internalLinks = data.linksInternal?.length || 0;
   const externalLinks = data.linksExternal?.length || 0;
   
   if (internalLinks === 0) {
     score -= 5;
-    deductions.push({ reason: 'No internal links', points: -5 });
+    deductions.push({ category: 'links', reason: 'No internal links', points: -5, severity: 'high' });
+  } else if (internalLinks >= 3) {
+    score += 2;
+    bonuses.push({ category: 'links', reason: `Good internal linking (${internalLinks} links)`, points: +2 });
   }
   
-  if (externalLinks === 0 && data.wordCount > 300) {
-    score -= 3;
-    deductions.push({ reason: 'No external links', points: -3 });
+  if (externalLinks === 0 && wordCount > 500) {
+    score -= 2;
+    deductions.push({ category: 'links', reason: 'No external links for long content', points: -2, severity: 'low' });
   }
 
-  // ─── Technical SEO (max -15) ───
+  // Check for broken link indicators (empty hrefs)
+  const emptyLinks = $('a[href=""], a[href="#"], a:not([href])').length;
+  if (emptyLinks > 3) {
+    score -= 3;
+    deductions.push({ category: 'links', reason: `${emptyLinks} empty/broken links`, points: -3, severity: 'medium' });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // TECHNICAL SEO (max -20)
+  // ═══════════════════════════════════════════════════
   const metadata = data.metadata || {};
   
+  // Canonical URL
   if (!metadata.canonical) {
-    score -= 5;
-    deductions.push({ reason: 'Missing canonical URL', points: -5 });
+    score -= 4;
+    deductions.push({ category: 'technical', reason: 'Missing canonical URL', points: -4, severity: 'high' });
+  } else {
+    score += 1;
+    bonuses.push({ category: 'technical', reason: 'Has canonical URL', points: +1 });
   }
   
-  if (!metadata.ogTitle && !metadata.ogDescription) {
-    score -= 5;
-    deductions.push({ reason: 'Missing Open Graph tags', points: -5 });
-  }
-  
-  if (!metadata.viewport) {
-    score -= 5;
-    deductions.push({ reason: 'Missing viewport meta tag', points: -5 });
+  // Open Graph
+  const hasOG = metadata.ogTitle || metadata.ogDescription || metadata.ogImage;
+  if (!hasOG) {
+    score -= 4;
+    deductions.push({ category: 'technical', reason: 'Missing Open Graph tags', points: -4, severity: 'medium' });
+  } else {
+    const ogComplete = metadata.ogTitle && metadata.ogDescription && metadata.ogImage;
+    if (ogComplete) {
+      score += 3;
+      bonuses.push({ category: 'technical', reason: 'Complete Open Graph tags', points: +3 });
+    }
   }
 
+  // Twitter Cards
+  const hasTwitter = metadata.twitterCard || metadata.twitterTitle;
+  if (!hasTwitter) {
+    score -= 2;
+    deductions.push({ category: 'technical', reason: 'Missing Twitter Card tags', points: -2, severity: 'low' });
+  }
+  
+  // Viewport
+  if (!metadata.viewport) {
+    score -= 5;
+    deductions.push({ category: 'technical', reason: 'Missing viewport meta tag', points: -5, severity: 'critical' });
+  }
+
+  // Language
   const htmlLang = $('html').attr('lang');
   if (!htmlLang) {
     score -= 3;
-    deductions.push({ reason: 'Missing lang attribute', points: -3 });
+    deductions.push({ category: 'technical', reason: 'Missing lang attribute', points: -3, severity: 'medium' });
   }
 
-  // ─── Structured Data Bonus (+5) ───
+  // Charset
+  const hasCharset = $('meta[charset]').length > 0 || $('meta[http-equiv="Content-Type"]').length > 0;
+  if (!hasCharset) {
+    score -= 2;
+    deductions.push({ category: 'technical', reason: 'Missing charset declaration', points: -2, severity: 'medium' });
+  }
+
+  // Robots meta
+  const robotsMeta = $('meta[name="robots"]').attr('content') || '';
+  if (robotsMeta.includes('noindex')) {
+    score -= 5;
+    deductions.push({ category: 'technical', reason: 'Page set to noindex', points: -5, severity: 'high' });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // STRUCTURED DATA (bonus up to +8)
+  // ═══════════════════════════════════════════════════
   const jsonLd = metadata.jsonLd || [];
   if (jsonLd.length > 0) {
     score += 5;
-    deductions.push({ reason: 'Has structured data', points: +5 });
+    bonuses.push({ category: 'structured', reason: `Has JSON-LD structured data (${jsonLd.length} schemas)`, points: +5 });
+    
+    // Check for specific valuable schemas
+    const schemaTypes = jsonLd.map(j => j['@type']).filter(Boolean);
+    const valuableTypes = ['Organization', 'LocalBusiness', 'Product', 'Article', 'BreadcrumbList', 'FAQPage', 'HowTo'];
+    const hasValuable = valuableTypes.some(t => schemaTypes.includes(t));
+    if (hasValuable) {
+      score += 3;
+      bonuses.push({ category: 'structured', reason: 'Has rich schema types', points: +3 });
+    }
   }
 
-  // Ensure score is within 0-100
+  // Microdata
+  const hasMicrodata = $('[itemscope]').length > 0;
+  if (hasMicrodata && jsonLd.length === 0) {
+    score += 2;
+    bonuses.push({ category: 'structured', reason: 'Has Microdata markup', points: +2 });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // MOBILE FRIENDLINESS (max -8)
+  // ═══════════════════════════════════════════════════
+  const viewportContent = metadata.viewport || '';
+  if (viewportContent && !viewportContent.includes('width=device-width')) {
+    score -= 3;
+    deductions.push({ category: 'mobile', reason: 'Viewport not mobile-optimized', points: -3, severity: 'medium' });
+  }
+
+  // Touch icons
+  const hasTouchIcon = $('link[rel*="apple-touch-icon"]').length > 0;
+  if (hasTouchIcon) {
+    score += 1;
+    bonuses.push({ category: 'mobile', reason: 'Has Apple touch icon', points: +1 });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // PERFORMANCE INDICATORS (max -8)
+  // ═══════════════════════════════════════════════════
+  const scripts = data.scripts || [];
+  const externalScripts = scripts.filter(s => s.src).length;
+  const inlineScripts = scripts.filter(s => !s.src).length;
+  
+  if (externalScripts > 15) {
+    score -= 4;
+    deductions.push({ category: 'performance', reason: `Too many external scripts (${externalScripts})`, points: -4, severity: 'medium' });
+  }
+
+  // Check for render-blocking scripts
+  const blockingScripts = scripts.filter(s => s.src && !s.async && !s.defer).length;
+  if (blockingScripts > 3) {
+    score -= 3;
+    deductions.push({ category: 'performance', reason: `${blockingScripts} render-blocking scripts`, points: -3, severity: 'medium' });
+  }
+
+  // Large inline scripts
+  const largeInlineScripts = scripts.filter(s => s.inline && s.size > 5000).length;
+  if (largeInlineScripts > 0) {
+    score -= 2;
+    deductions.push({ category: 'performance', reason: `${largeInlineScripts} large inline scripts`, points: -2, severity: 'low' });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // ACCESSIBILITY (bonus up to +5)
+  // ═══════════════════════════════════════════════════
+  const hasSkipLink = $('a[href="#main"], a[href="#content"], a.skip-link, a.skip-to-content').length > 0;
+  if (hasSkipLink) {
+    score += 1;
+    bonuses.push({ category: 'accessibility', reason: 'Has skip navigation link', points: +1 });
+  }
+
+  const hasAriaLandmarks = $('[role="main"], [role="navigation"], [role="banner"], main, nav, header, footer').length >= 2;
+  if (hasAriaLandmarks) {
+    score += 2;
+    bonuses.push({ category: 'accessibility', reason: 'Uses ARIA landmarks', points: +2 });
+  }
+
+  const formLabels = $('form label').length;
+  const formInputs = $('form input:not([type="hidden"]):not([type="submit"]):not([type="button"])').length;
+  if (formInputs > 0 && formLabels >= formInputs) {
+    score += 2;
+    bonuses.push({ category: 'accessibility', reason: 'Form inputs have labels', points: +2 });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // FINAL CALCULATIONS
+  // ═══════════════════════════════════════════════════
   score = Math.max(0, Math.min(100, score));
+  const roundedScore = Math.round(score);
+
+  // Determine grade with + and -
+  let grade;
+  if (roundedScore >= 95) grade = 'A+';
+  else if (roundedScore >= 90) grade = 'A';
+  else if (roundedScore >= 85) grade = 'A-';
+  else if (roundedScore >= 80) grade = 'B+';
+  else if (roundedScore >= 75) grade = 'B';
+  else if (roundedScore >= 70) grade = 'B-';
+  else if (roundedScore >= 65) grade = 'C+';
+  else if (roundedScore >= 60) grade = 'C';
+  else if (roundedScore >= 55) grade = 'C-';
+  else if (roundedScore >= 50) grade = 'D';
+  else grade = 'F';
+
+  // Group deductions by category
+  const categories = {};
+  [...deductions, ...bonuses].forEach(item => {
+    if (!categories[item.category]) {
+      categories[item.category] = { issues: [], score: 0 };
+    }
+    categories[item.category].issues.push(item);
+    categories[item.category].score += item.points;
+  });
 
   return {
-    score: Math.round(score),
+    score: roundedScore,
+    grade,
     deductions,
-    grade: score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F',
+    bonuses,
+    categories,
+    summary: {
+      critical: deductions.filter(d => d.severity === 'critical').length,
+      high: deductions.filter(d => d.severity === 'high').length,
+      medium: deductions.filter(d => d.severity === 'medium').length,
+      low: deductions.filter(d => d.severity === 'low').length,
+      bonuses: bonuses.length,
+    }
   };
 }

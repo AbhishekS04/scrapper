@@ -78,10 +78,11 @@ async function migrate() {
     // Add advanced columns if they don't exist
     const advancedCols = [
       'scripts', 'stylesheets', 'comments', 'leaked_data', 'security_info',
-      'hidden_fields', 'iframes', 'downloads', 'videos', 'suggestions', 'contact_info', 'seo_score'
+      'hidden_fields', 'iframes', 'downloads', 'videos', 'suggestions', 'contact_info', 'seo_score',
+      'performance_metrics', 'accessibility_score', 'content_quality'
     ];
     for (const col of advancedCols) {
-      const defaultVal = ['leaked_data', 'security_info', 'contact_info', 'seo_score'].includes(col) ? "'{}'" : "'[]'";
+      const defaultVal = ['leaked_data', 'security_info', 'contact_info', 'seo_score', 'performance_metrics', 'accessibility_score', 'content_quality'].includes(col) ? "'{}'" : "'[]'";
       await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name=${col}`.then(async rows => {
         if (rows.length === 0) {
           await sql(`ALTER TABLE scrape_results ADD COLUMN ${col} JSONB DEFAULT ${defaultVal}`);
