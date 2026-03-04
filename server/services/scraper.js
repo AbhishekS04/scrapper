@@ -8,6 +8,11 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { extractPageData } from './extractor.js';
 import { gatherSiteIntelligence } from './siteIntel.js';
+import { runBrutalRecon } from './brutalRecon.js';
+import { gatherBrowserIntel } from './browserIntel.js';
+import { analyzeContent } from './contentIntel.js';
+import { runSecurityAudit } from './securityAudit.js';
+import { detectAndScanCMS } from './cmsDetector.js';
 import { db } from './db.js';
 import { scrapeJobs, scrapeResults } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -315,6 +320,12 @@ export async function startScrapeJob(jobId, url, options = {}) {
     depth = parseInt(process.env.DEFAULT_DEPTH || '2'),
     siteIntel: runSiteIntel = true,
     concurrency = 3,
+    brutalMode = false,
+    browserIntel: runBrowserIntel = false,
+    contentAnalysis = false,
+    securityAudit: runSecAudit = false,
+    cmsDetection = false,
+    checkBrokenLinks = false,
   } = options;
 
   const maxPages = parseInt(process.env.MAX_PAGES_PER_JOB || '100');
@@ -435,6 +446,89 @@ export async function startScrapeJob(jobId, url, options = {}) {
         // Extract data
         const pageData = extractPageData(result.html, normalizedUrl, result.headers);
 
+        // ─── BRUTAL MODE: Deep intelligence gathering ───
+        let brutalReconData = {};
+        let browserIntelData = {};
+        let contentIntelData = {};
+        let securityAuditData = {};
+        let cmsInfoData = {};
+
+        const shouldRunBrutal = brutalMode || runBrowserIntel || contentAnalysis || runSecAudit || cmsDetection;
+
+        if (shouldRunBrutal && pagesScraped === 0) {
+          // Run brutal recon on first page only (site-wide checks)
+          if (brutalMode) {
+            sendProgress(jobId, { type: 'intel', message: '🔥 Running BRUTAL reconnaissance (sensitive files, admin panels, subdomains)...' });
+            try {
+              brutalReconData = await runBrutalRecon(normalizedUrl, result.html, (msg) => {
+                sendProgress(jobId, { type: 'intel', message: `🔍 ${msg}` });
+              });
+            } catch (err) {
+              sendProgress(jobId, { type: 'intel', message: `Recon partial failure: ${err.message?.substring(0, 100)}` });
+            }
+          }
+
+          // Browser intelligence (Playwright)
+          if (brutalMode || runBrowserIntel) {
+            sendProgress(jobId, { type: 'intel', message: '🌐 Capturing browser intelligence (network, console, cookies, storage)...' });
+            try {
+              browserIntelData = await gatherBrowserIntel(normalizedUrl, {
+                captureScreenshot: true,
+                captureNetwork: true,
+                captureConsole: true,
+                captureStorage: true,
+                captureCookies: true,
+                capturePwa: true,
+              });
+              const netCount = browserIntelData.networkSummary?.totalRequests || 0;
+              const cookieCount = browserIntelData.cookies?.length || 0;
+              sendProgress(jobId, { type: 'intel', message: `Browser intel: ${netCount} network requests, ${cookieCount} cookies captured` });
+            } catch (err) {
+              sendProgress(jobId, { type: 'intel', message: `Browser intel partial failure: ${err.message?.substring(0, 100)}` });
+            }
+          }
+
+          // Security audit
+          if (brutalMode || runSecAudit) {
+            sendProgress(jobId, { type: 'intel', message: '🛡️ Running security audit (CORS, CSP, WAF, headers)...' });
+            try {
+              securityAuditData = await runSecurityAudit(result.html, normalizedUrl, result.headers, (msg) => {
+                sendProgress(jobId, { type: 'intel', message: `🔒 ${msg}` });
+              });
+              sendProgress(jobId, { type: 'intel', message: `Security audit: Grade ${securityAuditData.overallGrade || 'N/A'}, Score ${securityAuditData.overallScore || 0}/100` });
+            } catch (err) {
+              sendProgress(jobId, { type: 'intel', message: `Security audit partial failure: ${err.message?.substring(0, 100)}` });
+            }
+          }
+
+          // CMS detection
+          if (brutalMode || cmsDetection) {
+            sendProgress(jobId, { type: 'intel', message: '🔧 Detecting CMS and running deep scan...' });
+            try {
+              cmsInfoData = await detectAndScanCMS(normalizedUrl, result.html, result.headers, (msg) => {
+                sendProgress(jobId, { type: 'intel', message: `🔧 ${msg}` });
+              });
+              const primaryCMS = cmsInfoData.primaryCMS?.cms || 'None detected';
+              sendProgress(jobId, { type: 'intel', message: `CMS: ${primaryCMS}` });
+            } catch (err) {
+              sendProgress(jobId, { type: 'intel', message: `CMS detection partial failure: ${err.message?.substring(0, 100)}` });
+            }
+          }
+        }
+
+        // Content analysis (can run on every page)
+        if (brutalMode || contentAnalysis) {
+          sendProgress(jobId, { type: 'intel', message: '📊 Analyzing content (keywords, readability, images)...' });
+          try {
+            contentIntelData = await analyzeContent(result.html, normalizedUrl, {
+              checkBrokenLinks: (brutalMode || checkBrokenLinks) && pagesScraped === 0,
+              onProgress: (msg) => sendProgress(jobId, { type: 'intel', message: `📝 ${msg}` }),
+            });
+          } catch (err) {
+            sendProgress(jobId, { type: 'intel', message: `Content analysis partial failure: ${err.message?.substring(0, 100)}` });
+          }
+        }
+
         // Store result
         sendProgress(jobId, {
           type: 'storing',
@@ -496,6 +590,12 @@ export async function startScrapeJob(jobId, url, options = {}) {
           linkRelations: pageData.linkRelations || [],
           responseHeaders: pageData.responseHeaders || {},
           siteIntel: (pagesScraped === 0 && siteIntelData) ? siteIntelData : {},
+          // ─── BRUTAL: Deep intelligence fields ───
+          brutalRecon: (pagesScraped === 0 && Object.keys(brutalReconData).length > 0) ? brutalReconData : {},
+          browserIntel: (pagesScraped === 0 && Object.keys(browserIntelData).length > 0) ? browserIntelData : {},
+          contentIntel: Object.keys(contentIntelData).length > 0 ? contentIntelData : {},
+          securityAudit: (pagesScraped === 0 && Object.keys(securityAuditData).length > 0) ? securityAuditData : {},
+          cmsInfo: (pagesScraped === 0 && Object.keys(cmsInfoData).length > 0) ? cmsInfoData : {},
         });
 
         pagesScraped++;

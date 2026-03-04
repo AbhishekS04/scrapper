@@ -73,5 +73,11 @@ export const scrapeResults = pgTable('scrape_results', {
   responseHeaders: jsonb('response_headers').default({}),
   // ─── ELITE: Site-wide intelligence ───
   siteIntel: jsonb('site_intel').default({}),
+  // ─── BRUTAL: Deep reconnaissance & intelligence ───
+  brutalRecon: jsonb('brutal_recon').default({}),
+  browserIntel: jsonb('browser_intel').default({}),
+  contentIntel: jsonb('content_intel').default({}),
+  securityAudit: jsonb('security_audit').default({}),
+  cmsInfo: jsonb('cms_info').default({}),
   scrapedAt: timestamp('scraped_at').defaultNow().notNull(),
 });

@@ -17,6 +17,11 @@ const TABS = [
   { id: 'design', label: 'Design Intel', icon: '🎨' },
   { id: 'content', label: 'Content', icon: '📰' },
   { id: 'intel', label: 'Site Intel', icon: '🌐' },
+  { id: 'recon', label: 'Recon', icon: '🔥' },
+  { id: 'browser', label: 'Browser Intel', icon: '🖥️' },
+  { id: 'contentAnalysis', label: 'Content Analysis', icon: '📊' },
+  { id: 'secAudit', label: 'Sec Audit', icon: '🔒' },
+  { id: 'cms', label: 'CMS', icon: '🔧' },
   { id: 'extras', label: 'More', icon: '📦' },
 ];
 
@@ -97,6 +102,23 @@ export default function ResultsTabs({ jobData }) {
                  || results.find(r => r.site_intel && Object.keys(r.site_intel).length > 0)?.site_intel
                  || {};
 
+  // ─── BRUTAL: Aggregate deep intelligence data ───
+  const brutalRecon = results.find(r => (r.brutalRecon && Object.keys(r.brutalRecon).length > 0))?.brutalRecon
+                   || results.find(r => (r.brutal_recon && Object.keys(r.brutal_recon).length > 0))?.brutal_recon
+                   || {};
+  const browserIntel = results.find(r => (r.browserIntel && Object.keys(r.browserIntel).length > 0))?.browserIntel
+                    || results.find(r => (r.browser_intel && Object.keys(r.browser_intel).length > 0))?.browser_intel
+                    || {};
+  const contentIntel = results.find(r => (r.contentIntel && Object.keys(r.contentIntel).length > 0))?.contentIntel
+                    || results.find(r => (r.content_intel && Object.keys(r.content_intel).length > 0))?.content_intel
+                    || {};
+  const securityAudit = results.find(r => (r.securityAudit && Object.keys(r.securityAudit).length > 0))?.securityAudit
+                     || results.find(r => (r.security_audit && Object.keys(r.security_audit).length > 0))?.security_audit
+                     || {};
+  const cmsInfo = results.find(r => (r.cmsInfo && Object.keys(r.cmsInfo).length > 0))?.cmsInfo
+               || results.find(r => (r.cms_info && Object.keys(r.cms_info).length > 0))?.cms_info
+               || {};
+
   const renderTab = () => {
     switch (activeTab) {
       case 'overview': return <OverviewTab job={job} results={results} allLinks={allLinks} allImages={allImages} allScripts={allScripts} allLeaked={allLeaked} allSecurity={allSecurity} suggestions={uniqueSuggestions} />;
@@ -115,6 +137,11 @@ export default function ResultsTabs({ jobData }) {
       case 'design': return <DesignIntelTab colorPalette={allColorPalette} fontInfo={allFontInfo} />;
       case 'content': return <ContentTab pricing={allPricing} reviews={allReviews} faqs={allFaqs} rssFeeds={allRssFeeds} copyright={allCopyright} />;
       case 'intel': return <SiteIntelTab siteIntel={siteIntel} apiEndpoints={allApiEndpoints} openAPIs={allOpenAPIs} responseHeaders={allResponseHeaders} fingerprints={allFingerprint} />;
+      case 'recon': return <ReconTab data={brutalRecon} />;
+      case 'browser': return <BrowserIntelTab data={browserIntel} />;
+      case 'contentAnalysis': return <ContentAnalysisTab data={contentIntel} />;
+      case 'secAudit': return <SecAuditTab data={securityAudit} />;
+      case 'cms': return <CMSTab data={cmsInfo} />;
       case 'extras': return <ExtrasTab comments={allComments} hidden={allHidden} iframes={allIframes} downloads={allDownloads} videos={allVideos} />;
       default: return null;
     }
@@ -2002,6 +2029,1094 @@ function SiteIntelTab({ siteIntel, apiEndpoints, openAPIs, responseHeaders, fing
               </div>
             ) : null
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── BRUTAL: Recon Tab ────────────────────────────────────────── */
+function ReconTab({ data }) {
+  const [section, setSection] = useState('files');
+  if (!data || Object.keys(data).length === 0) {
+    return <div className="text-center py-12 text-gray-500">No recon data available. Enable BRUTAL mode to probe sensitive files, admin panels, subdomains, and more.</div>;
+  }
+
+  const sections = [
+    { id: 'files', label: 'Sensitive Files', icon: '📁' },
+    { id: 'admin', label: 'Admin Panels', icon: '🔐' },
+    { id: 'sourcemaps', label: 'Source Maps', icon: '🗺️' },
+    { id: 'subdomains', label: 'Subdomains', icon: '🌐' },
+    { id: 'whois', label: 'WHOIS', icon: '📋' },
+    { id: 'favicon', label: 'Favicon Hash', icon: '🖼️' },
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`${section === s.id ? 'tab-button-active' : 'tab-button'} whitespace-nowrap text-xs`}>
+            <span className="mr-1">{s.icon}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'files' && (
+        <div className="space-y-2">
+          {data.sensitiveFiles?.length > 0 ? data.sensitiveFiles.map((f, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center gap-3">
+              <span className={`badge ${f.status < 400 ? 'badge-red' : 'badge-gray'} text-[10px]`}>{f.status}</span>
+              <span className={`font-mono text-sm ${f.status < 400 ? 'text-red-400' : 'text-gray-500'}`}>{f.path}</span>
+              {f.contentLength && <span className="text-gray-600 text-xs ml-auto">{f.contentLength} bytes</span>}
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No sensitive files found (checked 90+ paths)</div>}
+        </div>
+      )}
+
+      {section === 'admin' && (
+        <div className="space-y-2">
+          {data.adminPanels?.length > 0 ? data.adminPanels.map((a, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30">
+              <div className="flex items-center gap-3">
+                <span className={`badge ${a.status < 400 ? 'badge-red' : 'badge-gray'} text-[10px]`}>{a.status}</span>
+                <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline font-mono">{a.path}</a>
+                {a.hasLoginForm && <span className="badge badge-amber text-[9px]">Login Form</span>}
+              </div>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No admin panels found</div>}
+        </div>
+      )}
+
+      {section === 'sourcemaps' && (
+        <div className="space-y-2">
+          {data.sourceMaps?.length > 0 ? data.sourceMaps.map((sm, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-red-900/30 flex items-center gap-3">
+              <span className="badge badge-red text-[10px]">LEAK</span>
+              <span className="text-red-400 text-sm font-mono truncate">{sm.mapUrl || sm}</span>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No source maps detected</div>}
+        </div>
+      )}
+
+      {section === 'subdomains' && (
+        <div className="space-y-2">
+          {data.subdomains?.length > 0 ? (
+            <>
+              <div className="text-gray-400 text-sm mb-3">{data.subdomains.length} subdomains discovered via Certificate Transparency</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {data.subdomains.map((s, i) => (
+                  <div key={i} className="bg-dark-750 rounded-lg px-4 py-2 border border-dark-600/30 text-cyan-400 text-sm font-mono truncate">{s}</div>
+                ))}
+              </div>
+            </>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No subdomains discovered</div>}
+        </div>
+      )}
+
+      {section === 'whois' && (
+        <div>
+          {data.whois && Object.keys(data.whois).length > 0 ? (
+            <div className="bg-dark-750 rounded-lg p-5 border border-dark-600/30 grid grid-cols-2 gap-4 text-sm">
+              {data.whois.registrar && <div><span className="text-gray-500">Registrar: </span><span className="text-white">{data.whois.registrar}</span></div>}
+              {data.whois.registrationDate && <div><span className="text-gray-500">Registered: </span><span className="text-gray-300">{data.whois.registrationDate}</span></div>}
+              {data.whois.expirationDate && <div><span className="text-gray-500">Expires: </span><span className="text-gray-300">{data.whois.expirationDate}</span></div>}
+              {data.whois.lastChanged && <div><span className="text-gray-500">Updated: </span><span className="text-gray-300">{data.whois.lastChanged}</span></div>}
+              {data.whois.nameservers?.length > 0 && (
+                <div className="col-span-2"><span className="text-gray-500">Nameservers: </span><span className="text-emerald-400 font-mono text-xs">{data.whois.nameservers.join(', ')}</span></div>
+              )}
+              {data.whois.dnssec !== undefined && <div><span className="text-gray-500">DNSSEC: </span><span className={data.whois.dnssec ? 'text-green-400' : 'text-red-400'}>{data.whois.dnssec ? 'Enabled' : 'Disabled'}</span></div>}
+            </div>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No WHOIS data available</div>}
+        </div>
+      )}
+
+      {section === 'favicon' && (
+        <div>
+          {data.faviconHash ? (
+            <div className="bg-dark-750 rounded-lg p-5 border border-dark-600/30 space-y-3">
+              <div className="text-sm"><span className="text-gray-500">MD5: </span><span className="text-emerald-400 font-mono">{data.faviconHash.md5}</span></div>
+              <div className="text-sm"><span className="text-gray-500">SHA256: </span><span className="text-purple-400 font-mono text-xs break-all">{data.faviconHash.sha256}</span></div>
+              <div className="text-sm"><span className="text-gray-500">Size: </span><span className="text-gray-300">{data.faviconHash.size} bytes</span></div>
+              <div className="text-xs text-gray-500 mt-2">Use these hashes in Shodan to find similar infrastructure</div>
+            </div>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No favicon hash available</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── BRUTAL: Browser Intel Tab ────────────────────────────────── */
+function BrowserIntelTab({ data }) {
+  const [section, setSection] = useState('network');
+  if (!data || Object.keys(data).length === 0 || data.error) {
+    return <div className="text-center py-12 text-gray-500">No browser intelligence data available. Enable Browser Intel or BRUTAL mode to capture network traffic, cookies, storage, and more.{data?.error && <div className="mt-2 text-red-400 text-xs">{data.error}</div>}</div>;
+  }
+
+  const sections = [
+    { id: 'network', label: 'Network', icon: '📡' },
+    { id: 'console', label: 'Console', icon: '💻' },
+    { id: 'cookies', label: 'Cookies', icon: '🍪' },
+    { id: 'storage', label: 'Storage', icon: '💾' },
+    { id: 'pwa', label: 'PWA', icon: '📱' },
+    { id: 'screenshot', label: 'Screenshot', icon: '📸' },
+  ];
+
+  const ns = data.networkSummary || {};
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`${section === s.id ? 'tab-button-active' : 'tab-button'} whitespace-nowrap text-xs`}>
+            <span className="mr-1">{s.icon}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'network' && (
+        <div className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-white">{ns.totalRequests || 0}</div>
+              <div className="text-gray-500 text-xs">Total Requests</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-cyan-400">{ns.apiRequests || 0}</div>
+              <div className="text-gray-500 text-xs">API Calls</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-red-400">{ns.failedRequests || 0}</div>
+              <div className="text-gray-500 text-xs">Failed</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-purple-400">{ns.thirdPartyDomains?.length || 0}</div>
+              <div className="text-gray-500 text-xs">3rd Party Domains</div>
+            </div>
+          </div>
+
+          {/* Resource type breakdown */}
+          {ns.byResourceType && Object.keys(ns.byResourceType).length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">By Resource Type</h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(ns.byResourceType).sort((a,b) => b[1]-a[1]).map(([type, count]) => (
+                  <span key={type} className="badge badge-gray text-xs">{type}: {count}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Third party domains */}
+          {ns.thirdPartyDomains?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Third-Party Domains</h4>
+              <div className="flex flex-wrap gap-2">
+                {ns.thirdPartyDomains.map((d, i) => (
+                  <span key={i} className="text-amber-400 text-xs font-mono bg-amber-400/10 px-2 py-1 rounded">{d}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* API requests */}
+          {data.networkRequests?.filter(r => r.isApi).length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">API Requests</h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {data.networkRequests.filter(r => r.isApi).slice(0, 50).map((r, i) => (
+                  <div key={i} className="text-xs flex items-center gap-2">
+                    <span className={`badge ${r.method === 'POST' ? 'badge-amber' : 'badge-blue'} text-[9px] min-w-10 text-center`}>{r.method}</span>
+                    <span className={`badge ${(r.status || 0) < 400 ? 'badge-green' : 'badge-red'} text-[9px]`}>{r.status || '?'}</span>
+                    <span className="text-gray-300 font-mono truncate">{r.url}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'console' && (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {data.consoleLogs?.length > 0 ? data.consoleLogs.map((log, i) => (
+            <div key={i} className={`bg-dark-750 rounded-lg px-4 py-2 border ${log.type === 'error' ? 'border-red-900/30' : log.type === 'warning' ? 'border-amber-900/30' : 'border-dark-600/30'}`}>
+              <div className="flex items-center gap-2">
+                <span className={`badge ${log.type === 'error' ? 'badge-red' : log.type === 'warning' ? 'badge-amber' : 'badge-gray'} text-[9px]`}>{log.type}</span>
+                <span className="text-gray-300 text-xs font-mono truncate">{log.text}</span>
+              </div>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No console logs captured</div>}
+        </div>
+      )}
+
+      {section === 'cookies' && (
+        <div className="space-y-2">
+          {data.cookies?.length > 0 ? (
+            <>
+              <div className="text-gray-400 text-sm mb-2">{data.cookies.length} cookies found</div>
+              {data.cookies.map((c, i) => (
+                <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-white font-mono text-sm">{c.name}</span>
+                    <span className="text-gray-600 text-xs">{c.domain}</span>
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {c.secure && <span className="badge badge-green text-[9px]">Secure</span>}
+                    {c.httpOnly && <span className="badge badge-blue text-[9px]">HttpOnly</span>}
+                    {c.sameSite && <span className="badge badge-gray text-[9px]">SameSite={c.sameSite}</span>}
+                    <span className="badge badge-gray text-[9px]">Expires: {c.expires}</span>
+                    {c.size && <span className="badge badge-gray text-[9px]">{c.size}B</span>}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No cookies found</div>}
+        </div>
+      )}
+
+      {section === 'storage' && (
+        <div className="space-y-4">
+          {data.storage?.localStorage && Object.keys(data.storage.localStorage).length > 0 && (
+            <div>
+              <h4 className="text-gray-400 text-xs font-medium mb-2">localStorage ({Object.keys(data.storage.localStorage).length} keys)</h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {Object.entries(data.storage.localStorage).map(([k, v], i) => (
+                  <div key={i} className="bg-dark-750 rounded-lg px-4 py-2 border border-dark-600/30 text-xs">
+                    <span className="text-cyan-400 font-mono">{k}: </span>
+                    <span className="text-gray-400 font-mono">{String(v).substring(0, 200)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.storage?.sessionStorage && Object.keys(data.storage.sessionStorage).length > 0 && (
+            <div>
+              <h4 className="text-gray-400 text-xs font-medium mb-2">sessionStorage ({Object.keys(data.storage.sessionStorage).length} keys)</h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {Object.entries(data.storage.sessionStorage).map(([k, v], i) => (
+                  <div key={i} className="bg-dark-750 rounded-lg px-4 py-2 border border-dark-600/30 text-xs">
+                    <span className="text-purple-400 font-mono">{k}: </span>
+                    <span className="text-gray-400 font-mono">{String(v).substring(0, 200)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(!data.storage || (Object.keys(data.storage.localStorage || {}).length === 0 && Object.keys(data.storage.sessionStorage || {}).length === 0)) && (
+            <div className="text-center py-8 text-gray-500 text-sm">No storage data found</div>
+          )}
+        </div>
+      )}
+
+      {section === 'pwa' && (
+        <div>
+          {data.pwa ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+                  <div className={`text-2xl ${data.pwa.hasServiceWorker ? 'text-green-400' : 'text-gray-600'}`}>{data.pwa.hasServiceWorker ? '✓' : '✗'}</div>
+                  <div className="text-gray-400 text-xs mt-1">Service Worker</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+                  <div className={`text-2xl ${data.pwa.hasManifest ? 'text-green-400' : 'text-gray-600'}`}>{data.pwa.hasManifest ? '✓' : '✗'}</div>
+                  <div className="text-gray-400 text-xs mt-1">Web Manifest</div>
+                </div>
+              </div>
+              {data.pwa.manifestData && (
+                <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-sm space-y-2">
+                  <h4 className="text-gray-400 text-xs font-medium mb-2">Manifest Details</h4>
+                  {data.pwa.manifestData.name && <div><span className="text-gray-500">Name: </span><span className="text-white">{data.pwa.manifestData.name}</span></div>}
+                  {data.pwa.manifestData.shortName && <div><span className="text-gray-500">Short Name: </span><span className="text-gray-300">{data.pwa.manifestData.shortName}</span></div>}
+                  {data.pwa.manifestData.display && <div><span className="text-gray-500">Display: </span><span className="text-gray-300">{data.pwa.manifestData.display}</span></div>}
+                  {data.pwa.manifestData.startUrl && <div><span className="text-gray-500">Start URL: </span><span className="text-cyan-400 font-mono">{data.pwa.manifestData.startUrl}</span></div>}
+                  {data.pwa.manifestData.themeColor && <div className="flex items-center gap-2"><span className="text-gray-500">Theme: </span><span className="w-4 h-4 rounded" style={{backgroundColor: data.pwa.manifestData.themeColor}} /><span className="text-gray-300">{data.pwa.manifestData.themeColor}</span></div>}
+                </div>
+              )}
+              {data.pwa.themeColor && <div className="flex items-center gap-2 text-sm"><span className="text-gray-500">Theme Color: </span><span className="w-4 h-4 rounded" style={{backgroundColor: data.pwa.themeColor}} /><span className="text-gray-300">{data.pwa.themeColor}</span></div>}
+            </div>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No PWA data available</div>}
+        </div>
+      )}
+
+      {section === 'screenshot' && (
+        <div>
+          {data.screenshot ? (
+            <div className="space-y-3">
+              <h4 className="text-gray-400 text-xs font-medium">Full Page Screenshot (1920×1080)</h4>
+              <img src={data.screenshot} alt="Page screenshot" className="w-full rounded-lg border border-dark-600/30" />
+            </div>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">No screenshot captured</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── BRUTAL: Content Analysis Tab ─────────────────────────────── */
+function ContentAnalysisTab({ data }) {
+  const [section, setSection] = useState('keywords');
+  if (!data || Object.keys(data).length === 0) {
+    return <div className="text-center py-12 text-gray-500">No content analysis data available. Enable Content Analysis or BRUTAL mode.</div>;
+  }
+
+  const sections = [
+    { id: 'keywords', label: 'Keywords', icon: '🔑' },
+    { id: 'readability', label: 'Readability', icon: '📖' },
+    { id: 'structure', label: 'Structure', icon: '🏗️' },
+    { id: 'images', label: 'Image Audit', icon: '🖼️' },
+    { id: 'broken', label: 'Broken Links', icon: '🔗' },
+    { id: 'duplicate', label: 'Duplicates', icon: '📋' },
+  ];
+
+  const kd = data.keywordDensity || {};
+  const rd = data.readability || {};
+  const img = data.imageAudit || {};
+  const cs = data.contentStructure || {};
+  const bl = data.brokenLinks || {};
+  const dup = data.duplicateContent || {};
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`${section === s.id ? 'tab-button-active' : 'tab-button'} whitespace-nowrap text-xs`}>
+            <span className="mr-1">{s.icon}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'keywords' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-white">{kd.totalWords || 0}</div>
+              <div className="text-gray-500 text-xs">Total Words</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-cyan-400">{kd.uniqueWords || 0}</div>
+              <div className="text-gray-500 text-xs">Unique Words</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-purple-400">{kd.avgWordLength || 0}</div>
+              <div className="text-gray-500 text-xs">Avg Word Length</div>
+            </div>
+          </div>
+
+          {kd.topKeywords?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">Top Keywords</h4>
+              <div className="space-y-1.5">
+                {kd.topKeywords.slice(0, 20).map((k, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600 text-xs w-5 text-right">{i + 1}.</span>
+                    <span className="text-white font-mono">{k.word}</span>
+                    <div className="flex-1 bg-dark-600 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-cyan-500 h-full rounded-full" style={{ width: `${Math.min(k.density * 10, 100)}%` }} />
+                    </div>
+                    <span className="text-gray-500 text-xs min-w-10 text-right">{k.count}×</span>
+                    <span className="text-cyan-400 text-xs min-w-14 text-right">{k.density}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {kd.topBigrams?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">Top 2-Word Phrases</h4>
+              <div className="flex flex-wrap gap-2">
+                {kd.topBigrams.slice(0, 15).map((b, i) => (
+                  <span key={i} className="bg-purple-500/10 text-purple-400 text-xs px-2.5 py-1 rounded-full font-mono">
+                    {b.phrase} <span className="text-purple-600">({b.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {kd.topTrigrams?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">Top 3-Word Phrases</h4>
+              <div className="flex flex-wrap gap-2">
+                {kd.topTrigrams.slice(0, 10).map((t, i) => (
+                  <span key={i} className="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-1 rounded-full font-mono">
+                    {t.phrase} <span className="text-emerald-600">({t.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'readability' && (
+        <div className="space-y-4">
+          {rd.fleschReadingEase && (
+            <div className="bg-dark-750 rounded-lg p-5 border border-dark-600/30">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-gray-400 text-xs font-medium">Flesch Reading Ease</h4>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-white">{rd.fleschReadingEase.score}</div>
+                  <div className="text-gray-500 text-xs">{rd.fleschReadingEase.label}</div>
+                </div>
+              </div>
+              <div className="w-full bg-dark-600 rounded-full h-3 overflow-hidden">
+                <div className={`h-full rounded-full ${rd.fleschReadingEase.score >= 60 ? 'bg-green-500' : rd.fleschReadingEase.score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, rd.fleschReadingEase.score))}%` }} />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {rd.fleschKincaidGrade && (
+              <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                <div className="text-xl font-bold text-cyan-400">{rd.fleschKincaidGrade}</div>
+                <div className="text-gray-500 text-[10px]">Flesch-Kincaid Grade</div>
+              </div>
+            )}
+            {rd.gunningFogIndex && (
+              <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                <div className="text-xl font-bold text-purple-400">{rd.gunningFogIndex}</div>
+                <div className="text-gray-500 text-[10px]">Gunning Fog</div>
+              </div>
+            )}
+            {rd.colemanLiauIndex && (
+              <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                <div className="text-xl font-bold text-amber-400">{rd.colemanLiauIndex}</div>
+                <div className="text-gray-500 text-[10px]">Coleman-Liau</div>
+              </div>
+            )}
+            {rd.automatedReadabilityIndex && (
+              <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                <div className="text-xl font-bold text-emerald-400">{rd.automatedReadabilityIndex}</div>
+                <div className="text-gray-500 text-[10px]">ARI</div>
+              </div>
+            )}
+            {rd.smogIndex && (
+              <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                <div className="text-xl font-bold text-pink-400">{rd.smogIndex}</div>
+                <div className="text-gray-500 text-[10px]">SMOG</div>
+              </div>
+            )}
+          </div>
+
+          {rd.stats && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-gray-500">Words/Sentence: </span><span className="text-white">{rd.stats.avgWordsPerSentence}</span></div>
+              <div><span className="text-gray-500">Syllables/Word: </span><span className="text-white">{rd.stats.avgSyllablesPerWord}</span></div>
+              <div><span className="text-gray-500">Complex Words: </span><span className="text-amber-400">{rd.stats.percentComplexWords}%</span></div>
+              <div><span className="text-gray-500">Total Sentences: </span><span className="text-white">{rd.stats.totalSentences}</span></div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'structure' && (
+        <div className="space-y-4">
+          {cs.headingIssues?.length > 0 && (
+            <div className="bg-red-500/10 border border-red-900/30 rounded-lg p-4">
+              <h4 className="text-red-400 text-xs font-medium mb-2">Heading Issues</h4>
+              {cs.headingIssues.map((issue, i) => (
+                <div key={i} className="text-red-300 text-sm">• {issue}</div>
+              ))}
+            </div>
+          )}
+
+          {cs.headings?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">Heading Hierarchy</h4>
+              <div className="space-y-1">
+                {cs.headings.map((h, i) => (
+                  <div key={i} className="text-sm flex items-center gap-2" style={{ paddingLeft: `${(h.level - 1) * 16}px` }}>
+                    <span className="badge badge-blue text-[9px]">H{h.level}</span>
+                    <span className="text-gray-300 truncate">{h.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {cs.semanticElements && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-3">Semantic HTML Elements</h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(cs.semanticElements).filter(([,v]) => v > 0).map(([el, count]) => (
+                  <span key={el} className="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-1 rounded-full font-mono">
+                    &lt;{el}&gt; ×{count}
+                  </span>
+                ))}
+                {Object.values(cs.semanticElements).every(v => v === 0) && (
+                  <span className="text-gray-500 text-sm">No semantic elements found</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-xl font-bold text-white">{cs.paragraphCount || 0}</div>
+              <div className="text-gray-500 text-xs">Paragraphs</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-xl font-bold text-white">{cs.avgParagraphLength || 0}</div>
+              <div className="text-gray-500 text-xs">Avg ¶ Words</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-xl font-bold text-white">{(cs.lists?.ordered || 0) + (cs.lists?.unordered || 0)}</div>
+              <div className="text-gray-500 text-xs">Lists</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-xl font-bold text-white">{cs.forms?.length || 0}</div>
+              <div className="text-gray-500 text-xs">Forms</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {section === 'images' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-white">{img.totalImages || 0}</div>
+              <div className="text-gray-500 text-xs">Total Images</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl font-bold ${(img.score || 0) >= 70 ? 'text-green-400' : (img.score || 0) >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{img.score || 0}</div>
+              <div className="text-gray-500 text-xs">Optimization Score</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-cyan-400">{img.withLazyLoad || 0}</div>
+              <div className="text-gray-500 text-xs">Lazy Loaded</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-purple-400">{img.modernFormatCount || 0}</div>
+              <div className="text-gray-500 text-xs">Modern Format</div>
+            </div>
+          </div>
+
+          {img.issues?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Issues ({img.issues.length})</h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {img.issues.map((issue, i) => (
+                  <div key={i} className="text-xs flex items-start gap-2">
+                    <span className="badge badge-amber text-[9px] mt-0.5">!</span>
+                    <span className="text-gray-300">{issue.issue}</span>
+                    <span className="text-gray-600 font-mono text-[10px] truncate max-w-40">{issue.src}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'broken' && (
+        <div className="space-y-4">
+          {bl.totalLinks ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className="text-2xl font-bold text-white">{bl.totalLinks}</div>
+                  <div className="text-gray-500 text-xs">Links Checked</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className={`text-2xl font-bold ${bl.brokenLinks > 0 ? 'text-red-400' : 'text-green-400'}`}>{bl.brokenLinks}</div>
+                  <div className="text-gray-500 text-xs">Broken</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className="text-2xl font-bold text-amber-400">{bl.redirectedLinks || 0}</div>
+                  <div className="text-gray-500 text-xs">Redirected</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className={`text-2xl font-bold ${bl.healthScore >= 90 ? 'text-green-400' : bl.healthScore >= 70 ? 'text-amber-400' : 'text-red-400'}`}>{bl.healthScore}%</div>
+                  <div className="text-gray-500 text-xs">Health Score</div>
+                </div>
+              </div>
+              {bl.brokenDetails?.length > 0 && (
+                <div className="bg-dark-750 rounded-lg p-4 border border-red-900/30">
+                  <h4 className="text-red-400 text-xs font-medium mb-2">Broken Links</h4>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                    {bl.brokenDetails.map((l, i) => (
+                      <div key={i} className="text-xs flex items-center gap-2">
+                        <span className="badge badge-red text-[9px]">{l.status || 'ERR'}</span>
+                        <span className="text-red-300 font-mono truncate flex-1">{l.url}</span>
+                        {l.text && <span className="text-gray-600 truncate max-w-24">{l.text}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : <div className="text-center py-8 text-gray-500 text-sm">Broken link check not enabled or no data available</div>}
+        </div>
+      )}
+
+      {section === 'duplicate' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-white">{dup.totalSentences || 0}</div>
+              <div className="text-gray-500 text-xs">Sentences</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl font-bold ${(dup.duplicateSentences || 0) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{dup.duplicateSentences || 0}</div>
+              <div className="text-gray-500 text-xs">Duplicate</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl font-bold ${(dup.uniquenessScore || 100) >= 90 ? 'text-green-400' : 'text-amber-400'}`}>{dup.uniquenessScore || 100}%</div>
+              <div className="text-gray-500 text-xs">Uniqueness</div>
+            </div>
+          </div>
+
+          {dup.contentFingerprint && (
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30">
+              <span className="text-gray-500 text-xs">Content Fingerprint: </span>
+              <span className="text-emerald-400 font-mono text-xs break-all">{dup.contentFingerprint}</span>
+            </div>
+          )}
+
+          {dup.duplicateDetails?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-amber-900/30">
+              <h4 className="text-amber-400 text-xs font-medium mb-2">Repeated Content</h4>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {dup.duplicateDetails.map((d, i) => (
+                  <div key={i} className="text-xs border-b border-dark-600/20 pb-2">
+                    <span className="badge badge-amber text-[9px] mr-2">{d.occurrences}×</span>
+                    <span className="text-gray-300">{d.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── BRUTAL: Security Audit Tab ───────────────────────────────── */
+function SecAuditTab({ data }) {
+  const [section, setSection] = useState('overview');
+  if (!data || Object.keys(data).length === 0) {
+    return <div className="text-center py-12 text-gray-500">No security audit data available. Enable Security Audit or BRUTAL mode.</div>;
+  }
+
+  const sections = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'headers', label: 'Headers', icon: '🔒' },
+    { id: 'csp', label: 'CSP', icon: '📜' },
+    { id: 'cors', label: 'CORS', icon: '🌐' },
+    { id: 'mixed', label: 'Mixed Content', icon: '⚠️' },
+    { id: 'waf', label: 'WAF', icon: '🛡️' },
+  ];
+
+  const sh = data.securityHeaders || {};
+  const csp = data.csp || {};
+  const cors = data.cors || {};
+  const mc = data.mixedContent || {};
+  const waf = data.waf || {};
+  const cs = data.cookieSecurity || {};
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`${section === s.id ? 'tab-button-active' : 'tab-button'} whitespace-nowrap text-xs`}>
+            <span className="mr-1">{s.icon}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'overview' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className={`text-4xl font-bold ${data.overallScore >= 70 ? 'text-green-400' : data.overallScore >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                {data.overallGrade || '?'}
+              </div>
+              <div className="text-gray-500 text-xs mt-1">Overall Grade</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className="text-3xl font-bold text-white">{data.overallScore || 0}</div>
+              <div className="text-gray-500 text-xs mt-1">Score / 100</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className="text-3xl font-bold text-cyan-400">{sh.passed || 0}/{sh.total || 0}</div>
+              <div className="text-gray-500 text-xs mt-1">Headers Present</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className={`text-3xl font-bold ${waf.hasWAF ? 'text-green-400' : 'text-gray-600'}`}>{waf.hasWAF ? '✓' : '✗'}</div>
+              <div className="text-gray-500 text-xs mt-1">WAF Detected</div>
+            </div>
+          </div>
+
+          {/* Cookie security */}
+          {cs.total > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Cookie Security ({cs.total} cookies)</h4>
+              {cs.issues?.length > 0 && (
+                <div className="space-y-1">
+                  {cs.issues.slice(0, 10).map((issue, i) => (
+                    <div key={i} className="text-xs text-amber-400">• {issue}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Rate limiting */}
+          {data.rateLimiting && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Rate Limiting</h4>
+              <div className="text-sm">
+                <span className={data.rateLimiting.detected ? 'text-green-400' : 'text-gray-500'}>
+                  {data.rateLimiting.detected ? 'Rate limiting detected' : 'No rate limiting headers found'}
+                </span>
+              </div>
+              {Object.keys(data.rateLimiting.rateLimitHeaders || {}).length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {Object.entries(data.rateLimiting.rateLimitHeaders).map(([k, v], i) => (
+                    <div key={i} className="text-xs"><span className="text-purple-400 font-mono">{k}: </span><span className="text-gray-300">{v}</span></div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'headers' && (
+        <div className="space-y-2">
+          {sh.results?.map((h, i) => (
+            <div key={i} className={`bg-dark-750 rounded-lg px-4 py-3 border ${h.present ? 'border-green-900/30' : 'border-dark-600/30'} flex items-center gap-3`}>
+              <span className={`text-lg ${h.present ? 'text-green-400' : 'text-gray-600'}`}>{h.present ? '✓' : '✗'}</span>
+              <div className="flex-1">
+                <div className="text-sm text-white">{h.name} <span className="text-gray-600 font-mono text-xs">({h.header})</span></div>
+                {h.present ? (
+                  <div className="text-xs text-gray-500 font-mono truncate">{h.value}</div>
+                ) : (
+                  <div className="text-xs text-gray-600">{h.recommendation}</div>
+                )}
+              </div>
+              {!h.present && <span className={`badge ${h.severity === 'HIGH' ? 'badge-red' : h.severity === 'MEDIUM' ? 'badge-amber' : 'badge-gray'} text-[9px]`}>{h.severity}</span>}
+            </div>
+          ))}
+
+          {sh.dangerousHeaders?.length > 0 && (
+            <div className="mt-4 bg-amber-500/10 border border-amber-900/30 rounded-lg p-4">
+              <h4 className="text-amber-400 text-xs font-medium mb-2">Information Leakage Headers</h4>
+              {sh.dangerousHeaders.map((d, i) => (
+                <div key={i} className="text-xs mb-1">
+                  <span className="text-amber-400 font-mono">{d.header}: </span>
+                  <span className="text-gray-300">{d.value}</span>
+                  <span className="text-gray-600 ml-2">— {d.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'csp' && (
+        <div className="space-y-4">
+          {csp.hasCSP ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className={`text-2xl font-bold ${csp.score >= 70 ? 'text-green-400' : csp.score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{csp.score}</div>
+                  <div className="text-gray-500 text-xs">CSP Score</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className="text-2xl font-bold text-white">{Object.keys(csp.directives || {}).length}</div>
+                  <div className="text-gray-500 text-xs">Directives</div>
+                </div>
+                <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+                  <div className={`text-2xl font-bold ${csp.isReportOnly ? 'text-amber-400' : 'text-green-400'}`}>{csp.isReportOnly ? 'Report' : 'Enforce'}</div>
+                  <div className="text-gray-500 text-xs">Mode</div>
+                </div>
+              </div>
+
+              {csp.issues?.length > 0 && (
+                <div className="bg-red-500/10 border border-red-900/30 rounded-lg p-4">
+                  <h4 className="text-red-400 text-xs font-medium mb-2">Issues ({csp.issues.length})</h4>
+                  {csp.issues.map((issue, i) => (
+                    <div key={i} className="text-xs text-red-300 mb-1">• {issue}</div>
+                  ))}
+                </div>
+              )}
+
+              {csp.missingDirectives?.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-900/30 rounded-lg p-4">
+                  <h4 className="text-amber-400 text-xs font-medium mb-2">Missing Recommended Directives</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {csp.missingDirectives.map((d, i) => (
+                      <span key={i} className="badge badge-amber text-xs">{d}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="bg-red-500/10 border border-red-900/30 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-3">⚠️</div>
+              <div className="text-red-400 font-medium">No Content-Security-Policy Header</div>
+              <div className="text-gray-500 text-sm mt-1">This site has no CSP protection against XSS and injection attacks</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'cors' && (
+        <div className="space-y-4">
+          <div className={`rounded-lg p-4 border ${cors.severity === 'CRITICAL' ? 'bg-red-500/10 border-red-900/30' : cors.severity === 'HIGH' ? 'bg-amber-500/10 border-amber-900/30' : 'bg-dark-750 border-dark-600/30'}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className={`badge ${cors.severity === 'CRITICAL' ? 'badge-red' : cors.severity === 'HIGH' ? 'badge-amber' : cors.severity === 'MEDIUM' ? 'badge-amber' : 'badge-green'} text-xs`}>
+                {cors.severity || 'N/A'}
+              </span>
+              <span className="text-white text-sm">CORS Policy</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><span className="text-gray-500">Wildcard Origin: </span><span className={cors.allowsWildcard ? 'text-amber-400' : 'text-gray-400'}>{cors.allowsWildcard ? 'Yes' : 'No'}</span></div>
+              <div><span className="text-gray-500">Reflects Origin: </span><span className={cors.reflectsOrigin ? 'text-red-400' : 'text-gray-400'}>{cors.reflectsOrigin ? 'Yes ⚠' : 'No'}</span></div>
+              <div><span className="text-gray-500">Allows Null: </span><span className={cors.allowsNull ? 'text-red-400' : 'text-gray-400'}>{cors.allowsNull ? 'Yes ⚠' : 'No'}</span></div>
+              <div><span className="text-gray-500">Credentials: </span><span className={cors.allowsCredentials ? 'text-amber-400' : 'text-gray-400'}>{cors.allowsCredentials ? 'Yes' : 'No'}</span></div>
+            </div>
+          </div>
+
+          {cors.details?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Test Results</h4>
+              {cors.details.map((d, i) => (
+                <div key={i} className="text-xs mb-1.5 flex gap-2">
+                  <span className="text-gray-500 min-w-32">Origin: {d.testedOrigin}</span>
+                  <span className="text-gray-300">→ {d.allowOrigin || 'No ACAO header'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'mixed' && (
+        <div className="space-y-4">
+          {!mc.applicable ? (
+            <div className="text-center py-8 text-gray-500 text-sm">{mc.reason || 'Mixed content check not applicable'}</div>
+          ) : mc.total === 0 ? (
+            <div className="bg-green-500/10 border border-green-900/30 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-2">✓</div>
+              <div className="text-green-400">No mixed content detected</div>
+            </div>
+          ) : (
+            <>
+              {mc.active?.length > 0 && (
+                <div className="bg-red-500/10 border border-red-900/30 rounded-lg p-4">
+                  <h4 className="text-red-400 text-xs font-medium mb-2">Active Mixed Content ({mc.active.length})</h4>
+                  {mc.active.map((m, i) => (
+                    <div key={i} className="text-xs mb-1 flex items-center gap-2">
+                      <span className="badge badge-red text-[9px]">{m.type}</span>
+                      <span className="text-red-300 font-mono truncate">{m.url}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {mc.passive?.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-900/30 rounded-lg p-4">
+                  <h4 className="text-amber-400 text-xs font-medium mb-2">Passive Mixed Content ({mc.passive.length})</h4>
+                  {mc.passive.map((m, i) => (
+                    <div key={i} className="text-xs mb-1 flex items-center gap-2">
+                      <span className="badge badge-amber text-[9px]">{m.type}</span>
+                      <span className="text-amber-300 font-mono truncate">{m.url}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {section === 'waf' && (
+        <div className="space-y-4">
+          {waf.hasWAF ? (
+            <>
+              <div className="bg-green-500/10 border border-green-900/30 rounded-lg p-4">
+                <h4 className="text-green-400 text-sm font-medium mb-2">WAF/Firewall Detected</h4>
+                <div className="space-y-2">
+                  {waf.detected?.map((w, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm">
+                      <span className="badge badge-green text-xs">{w.name}</span>
+                      <span className="text-gray-400 text-xs">{w.evidence}</span>
+                      <span className="badge badge-gray text-[9px]">{w.confidence}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {waf.serverHeader && <div className="text-sm"><span className="text-gray-500">Server: </span><span className="text-white">{waf.serverHeader}</span></div>}
+              {waf.poweredBy && <div className="text-sm"><span className="text-gray-500">Powered By: </span><span className="text-amber-400">{waf.poweredBy}</span></div>}
+            </>
+          ) : (
+            <div className="bg-dark-750 border border-dark-600/30 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-2">🛡️</div>
+              <div className="text-gray-400">No WAF/Firewall detected</div>
+              {waf.serverHeader && <div className="text-gray-600 text-sm mt-1">Server: {waf.serverHeader}</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── BRUTAL: CMS Tab ──────────────────────────────────────────── */
+function CMSTab({ data }) {
+  const [section, setSection] = useState('detection');
+  if (!data || Object.keys(data).length === 0) {
+    return <div className="text-center py-12 text-gray-500">No CMS data available. Enable CMS Detection or BRUTAL mode.</div>;
+  }
+
+  const isWP = data.wordpress && data.wordpress.isWordPress;
+  const sections = [
+    { id: 'detection', label: 'Detection', icon: '🔍' },
+    ...(isWP ? [
+      { id: 'wpUsers', label: 'WP Users', icon: '👤' },
+      { id: 'wpPlugins', label: 'WP Plugins', icon: '🧩' },
+      { id: 'wpThemes', label: 'WP Themes', icon: '🎨' },
+      { id: 'wpSecurity', label: 'WP Security', icon: '🔒' },
+    ] : []),
+  ];
+
+  const wp = data.wordpress || {};
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`${section === s.id ? 'tab-button-active' : 'tab-button'} whitespace-nowrap text-xs`}>
+            <span className="mr-1">{s.icon}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'detection' && (
+        <div className="space-y-4">
+          {data.detected?.length > 0 ? (
+            <div className="space-y-2">
+              {data.detected.map((cms, i) => (
+                <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-white text-lg font-bold">{cms.cms}</span>
+                    {cms.version && <span className="badge badge-cyan text-xs">v{cms.version}</span>}
+                    <div className="ml-auto flex items-center gap-2">
+                      <div className="w-20 bg-dark-600 rounded-full h-2 overflow-hidden">
+                        <div className={`h-full rounded-full ${cms.confidence >= 70 ? 'bg-green-500' : cms.confidence >= 40 ? 'bg-amber-500' : 'bg-gray-500'}`}
+                          style={{ width: `${cms.confidence}%` }} />
+                      </div>
+                      <span className="text-gray-400 text-xs">{cms.confidence}%</span>
+                    </div>
+                  </div>
+                  {cms.evidence?.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {cms.evidence.map((e, j) => (
+                        <span key={j} className="text-gray-600 text-[10px] bg-dark-600 px-2 py-0.5 rounded">{e}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 text-sm">No CMS detected</div>
+          )}
+
+          {data.cmsSpecificPaths?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">CMS Paths Found</h4>
+              {data.cmsSpecificPaths.map((p, i) => (
+                <div key={i} className="text-xs mb-1 flex items-center gap-2">
+                  <span className="badge badge-green text-[9px]">{p.status}</span>
+                  <span className="text-cyan-400 font-mono">{p.path}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'wpUsers' && isWP && (
+        <div className="space-y-2">
+          {wp.users?.length > 0 ? wp.users.map((u, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center gap-3">
+              {u.avatar && <img src={u.avatar} alt="" className="w-8 h-8 rounded-full" />}
+              <div>
+                <div className="text-white text-sm">{u.name || u.slug}</div>
+                <div className="text-gray-500 text-xs font-mono">/{u.slug}</div>
+              </div>
+              <span className="badge badge-gray text-[9px] ml-auto">ID: {u.id}</span>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No users enumerated (API may be restricted)</div>}
+          <div className="text-xs text-gray-600 mt-2">REST API: {wp.restApi || 'unknown'}</div>
+        </div>
+      )}
+
+      {section === 'wpPlugins' && isWP && (
+        <div className="space-y-2">
+          {wp.plugins?.length > 0 ? wp.plugins.map((p, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center gap-3">
+              <span className="badge badge-purple text-[10px]">Plugin</span>
+              <span className="text-white text-sm">{p.name}</span>
+              <span className="badge badge-gray text-[9px] ml-auto">v{p.version}</span>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No plugins detected</div>}
+        </div>
+      )}
+
+      {section === 'wpThemes' && isWP && (
+        <div className="space-y-2">
+          {wp.themes?.length > 0 ? wp.themes.map((t, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center gap-3">
+              <span className="badge badge-cyan text-[10px]">Theme</span>
+              <span className="text-white text-sm">{t.displayName || t.name}</span>
+              {t.active && <span className="badge badge-green text-[9px]">Active</span>}
+              <span className="badge badge-gray text-[9px] ml-auto">v{t.version}</span>
+            </div>
+          )) : <div className="text-center py-8 text-gray-500 text-sm">No themes detected</div>}
+        </div>
+      )}
+
+      {section === 'wpSecurity' && isWP && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl ${wp.xmlrpc ? 'text-red-400' : 'text-green-400'}`}>{wp.xmlrpc ? '⚠' : '✓'}</div>
+              <div className="text-gray-500 text-xs">XML-RPC</div>
+              <div className="text-gray-600 text-[10px]">{wp.xmlrpc ? 'Enabled' : 'Disabled'}</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl ${wp.debug ? 'text-red-400' : 'text-green-400'}`}>{wp.debug ? '⚠' : '✓'}</div>
+              <div className="text-gray-500 text-xs">Debug Log</div>
+              <div className="text-gray-600 text-[10px]">{wp.debug ? 'Exposed' : 'Hidden'}</div>
+            </div>
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-center">
+              <div className={`text-2xl ${wp.registration ? 'text-amber-400' : 'text-green-400'}`}>{wp.registration ? '⚠' : '✓'}</div>
+              <div className="text-gray-500 text-xs">Registration</div>
+              <div className="text-gray-600 text-[10px]">{wp.registration ? 'Open' : 'Closed'}</div>
+            </div>
+          </div>
+
+          <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-sm space-y-2">
+            {wp.version && <div><span className="text-gray-500">Version: </span><span className="text-amber-400">{wp.version}</span></div>}
+            {wp.uploads && <div><span className="text-gray-500">Uploads Dir: </span><span className={wp.uploads === 'directory-listing-enabled' ? 'text-red-400' : 'text-gray-300'}>{wp.uploads}</span></div>}
+            {wp.readme !== null && <div><span className="text-gray-500">readme.html: </span><span className={wp.readme ? 'text-red-400' : 'text-green-400'}>{wp.readme ? 'Accessible' : 'Hidden'}</span></div>}
+            {wp.wpCron !== undefined && <div><span className="text-gray-500">WP-Cron: </span><span className="text-gray-300">{wp.wpCron ? 'Accessible' : 'Hidden'}</span></div>}
+          </div>
         </div>
       )}
     </div>

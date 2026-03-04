@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 
 const SCAN_PRESETS = [
-  { key: 'quick', label: 'Quick Scan', desc: 'Single page, basic extraction', icon: '⚡', depth: 1, options: { deepScan: false, followLinks: false, siteIntel: false } },
-  { key: 'standard', label: 'Standard', desc: 'Follow links, 2 levels deep', icon: '🔍', depth: 2, options: { deepScan: false, followLinks: true, siteIntel: false } },
-  { key: 'deep', label: 'Deep Scan', desc: 'Full crawl, 4 levels deep', icon: '🕵️', depth: 4, options: { deepScan: true, followLinks: true, siteIntel: true } },
-  { key: 'elite', label: 'ELITE', desc: 'Maximum intelligence gathering', icon: '🏴‍☠️', depth: 5, options: { deepScan: true, followLinks: true, siteIntel: true } },
+  { key: 'quick', label: 'Quick Scan', desc: 'Single page, basic extraction', icon: '⚡', depth: 1, options: { deepScan: false, followLinks: false, siteIntel: false, brutalMode: false, browserIntel: false, contentAnalysis: false, securityAuditOpt: false, cmsDetection: false } },
+  { key: 'standard', label: 'Standard', desc: 'Follow links, 2 levels deep', icon: '🔍', depth: 2, options: { deepScan: false, followLinks: true, siteIntel: false, brutalMode: false, browserIntel: false, contentAnalysis: false, securityAuditOpt: false, cmsDetection: false } },
+  { key: 'deep', label: 'Deep Scan', desc: 'Full crawl, 4 levels deep', icon: '🕵️', depth: 4, options: { deepScan: true, followLinks: true, siteIntel: true, brutalMode: false, browserIntel: false, contentAnalysis: true, securityAuditOpt: true, cmsDetection: true } },
+  { key: 'elite', label: 'ELITE', desc: 'Maximum intelligence gathering', icon: '🏴‍☠️', depth: 5, options: { deepScan: true, followLinks: true, siteIntel: true, brutalMode: false, browserIntel: true, contentAnalysis: true, securityAuditOpt: true, cmsDetection: true } },
+  { key: 'brutal', label: 'BRUTAL', desc: 'Everything. No mercy.', icon: '🔥', depth: 5, options: { deepScan: true, followLinks: true, siteIntel: true, brutalMode: true, browserIntel: true, contentAnalysis: true, securityAuditOpt: true, cmsDetection: true, checkBrokenLinks: true } },
 ];
 
 const OPTION_GROUPS = [
@@ -22,7 +23,7 @@ const OPTION_GROUPS = [
     title: 'Security & Leak Detection',
     items: [
       { key: 'detectLeaks', label: 'Leak Scanner', icon: '🔓', desc: 'Scan for exposed API keys, tokens, secrets' },
-      { key: 'securityAudit', label: 'Security Headers', icon: '🛡️', desc: 'Audit HTTP security headers' },
+      { key: 'securityAuditOpt', label: 'Security Audit', icon: '🛡️', desc: 'CORS, CSP, WAF, headers audit' },
       { key: 'extractHidden', label: 'Hidden Fields', icon: '👁️‍🗨️', desc: 'Find hidden form inputs (CSRF, tokens)' },
       { key: 'extractIframes', label: 'Iframes', icon: '📦', desc: 'Detect embedded iframes' },
     ],
@@ -31,6 +32,16 @@ const OPTION_GROUPS = [
     title: 'Site Intelligence',
     items: [
       { key: 'siteIntel', label: 'Full Intel', icon: '🌐', desc: 'DNS, SSL, sitemap, robots.txt analysis' },
+      { key: 'cmsDetection', label: 'CMS Detection', icon: '🔧', desc: 'WordPress deep scan, CMS fingerprinting' },
+      { key: 'contentAnalysis', label: 'Content Analysis', icon: '📊', desc: 'Keywords, readability, structure audit' },
+    ],
+  },
+  {
+    title: 'BRUTAL Mode',
+    items: [
+      { key: 'brutalMode', label: 'Recon', icon: '🔥', desc: 'Sensitive files, admin panels, subdomains, WHOIS' },
+      { key: 'browserIntel', label: 'Browser Intel', icon: '🖥️', desc: 'Network capture, cookies, storage, PWA, screenshot' },
+      { key: 'checkBrokenLinks', label: 'Broken Links', icon: '🔗', desc: 'Check every link for 404s and redirects' },
     ],
   },
 ];
@@ -49,10 +60,15 @@ export default function URLInput({ onSubmit, loading }) {
     extractComments: true,
     extractDownloads: true,
     detectLeaks: true,
-    securityAudit: true,
+    securityAuditOpt: false,
     extractHidden: true,
     extractIframes: true,
     siteIntel: false,
+    brutalMode: false,
+    browserIntel: false,
+    contentAnalysis: false,
+    cmsDetection: false,
+    checkBrokenLinks: false,
     depth: 2,
   });
   const inputRef = useRef(null);
@@ -78,7 +94,13 @@ export default function URLInput({ onSubmit, loading }) {
     e.preventDefault();
     if (!url.trim()) return;
     const finalUrl = protocol + url.trim();
-    onSubmit(finalUrl, options);
+    // Map frontend option keys to backend-expected keys
+    const mappedOptions = {
+      ...options,
+      securityAudit: options.securityAuditOpt,
+    };
+    delete mappedOptions.securityAuditOpt;
+    onSubmit(finalUrl, mappedOptions);
   };
 
   const applyPreset = (preset) => {
@@ -257,6 +279,7 @@ export default function URLInput({ onSubmit, loading }) {
               <div key={group.title}>
                 <h4 className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-semibold mb-3 flex items-center gap-2">
                   {group.title === 'Security & Leak Detection' && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
+                  {group.title === 'BRUTAL Mode' && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
                   {group.title}
                 </h4>
                 <div className="space-y-2">

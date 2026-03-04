@@ -111,6 +111,12 @@ async function migrate() {
       { name: 'link_relations', defaultVal: '[]' },
       { name: 'response_headers', defaultVal: '{}' },
       { name: 'site_intel', defaultVal: '{}' },
+      // ─── BRUTAL: Deep recon & intelligence columns ───
+      { name: 'brutal_recon', defaultVal: '{}' },
+      { name: 'browser_intel', defaultVal: '{}' },
+      { name: 'content_intel', defaultVal: '{}' },
+      { name: 'security_audit', defaultVal: '{}' },
+      { name: 'cms_info', defaultVal: '{}' },
     ];
     for (const col of advancedCols) {
       const rows = await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name=${col.name}`;
