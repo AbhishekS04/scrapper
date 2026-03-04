@@ -151,27 +151,33 @@ export default function ResultsTabs({ jobData }) {
     <div className="w-full max-w-6xl mx-auto mt-4 sm:mt-8 animate-slide-up">
       <div className="glass-panel overflow-hidden">
         {/* Tab bar */}
-        <div className="border-b border-dark-600/50 px-2 sm:px-4 pt-2 sm:pt-3 overflow-x-auto scrollbar-hide">
-          <div className="flex gap-0.5 sm:gap-1 min-w-max">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative ${activeTab === tab.id ? 'tab-button-active' : 'tab-button'}`}
-              >
-                <span className="mr-1.5">{tab.icon}</span>
-                {tab.label}
-                {/* Alert badge for leaks */}
-                {tab.id === 'leaks' && hasLeaks && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-                )}
-                {tab.id === 'suggestions' && uniqueSuggestions.length > 0 && (
-                  <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-mono">
-                    {uniqueSuggestions.length}
-                  </span>
-                )}
-              </button>
-            ))}
+        <div className="relative border-b border-dark-600/50">
+          {/* Scroll fade indicators */}
+          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-dark-800/90 to-transparent z-10 sm:hidden" />
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-dark-800/90 to-transparent z-10 sm:hidden" />
+          <div className="px-2 sm:px-4 pt-2 sm:pt-3 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-0.5 sm:gap-1 min-w-max pb-0.5">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative whitespace-nowrap ${activeTab === tab.id ? 'tab-button-active' : 'tab-button'}`}
+                >
+                  <span className="mr-1 sm:mr-1.5">{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="sm:hidden">{tab.label.length > 8 ? tab.label.slice(0, 7) + '…' : tab.label}</span>
+                  {/* Alert badge for leaks */}
+                  {tab.id === 'leaks' && hasLeaks && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-red-500 rounded-full animate-pulse" />
+                  )}
+                  {tab.id === 'suggestions' && uniqueSuggestions.length > 0 && (
+                    <span className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] bg-amber-500/20 text-amber-400 px-1 sm:px-1.5 py-0.5 rounded-full font-mono">
+                      {uniqueSuggestions.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

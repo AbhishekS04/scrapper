@@ -76,11 +76,11 @@
 
   /* ── Tabs ──────────────────────────────────── */
   .tab-button {
-    @apply px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium rounded-xl transition-all duration-200
+    @apply px-2 sm:px-4 py-1.5 sm:py-2.5 text-[10px] sm:text-sm font-medium rounded-lg sm:rounded-xl transition-all duration-200
            text-gray-500 hover:text-gray-200 hover:bg-white/[0.05];
   }
   .tab-button-active {
-    @apply px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium rounded-xl
+    @apply px-2 sm:px-4 py-1.5 sm:py-2.5 text-[10px] sm:text-sm font-medium rounded-lg sm:rounded-xl
            text-white bg-white/[0.1] border border-white/[0.15];
   }
 
@@ -272,5 +272,30 @@
   .data-table tbody tr td {
     padding-top: 0.625rem;
     padding-bottom: 0.625rem;
+  }
+
+  /* Stack stat cards better on mobile */
+  .stat-card {
+    padding: 0.625rem;
+  }
+
+  /* Ensure glass panels don't overflow */
+  .glass-panel {
+    overflow-x: hidden;
+    word-break: break-word;
+  }
+
+  /* Better font mono wrapping on small screens */
+  .font-mono {
+    word-break: break-all;
+  }
+}
+
+/* ── Small mobile (< 375px) adjustments ─────── */
+@media (max-width: 374px) {
+  .tab-button, .tab-button-active {
+    padding-left: 0.375rem;
+    padding-right: 0.375rem;
+    font-size: 9px;
   }
 }
