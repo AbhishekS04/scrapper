@@ -13,6 +13,10 @@ const TABS = [
   { id: 'contacts', label: 'Contacts', icon: '📬' },
   { id: 'metadata', label: 'Metadata', icon: '🏷️' },
   { id: 'tech', label: 'Tech Stack', icon: '⚙️' },
+  { id: 'seo', label: 'SEO & Schema', icon: '🔍' },
+  { id: 'design', label: 'Design Intel', icon: '🎨' },
+  { id: 'content', label: 'Content', icon: '📰' },
+  { id: 'intel', label: 'Site Intel', icon: '🌐' },
   { id: 'extras', label: 'More', icon: '📦' },
 ];
 
@@ -71,6 +75,28 @@ export default function ResultsTabs({ jobData }) {
   // Check if leaks were found
   const hasLeaks = allLeaked.some(l => (l.totalFindings || 0) > 0);
 
+  // ─── ELITE: Aggregate new data ───
+  const allRssFeeds = results.flatMap(r => r.rssFeeds || r.rss_feeds || []);
+  const allApiEndpoints = results.flatMap(r => r.apiEndpoints || r.api_endpoints || []);
+  const allColorPalette = results.map(r => r.colorPalette || r.color_palette || {});
+  const allFontInfo = results.map(r => r.fontInfo || r.font_info || {});
+  const allPricing = results.flatMap(r => r.pricing || []);
+  const allReviews = results.flatMap(r => r.reviews || []);
+  const allFaqs = results.flatMap(r => r.faqs || []);
+  const allBreadcrumbs = results.flatMap(r => r.breadcrumbs || []);
+  const allNavigation = results.map(r => r.navigation || {});
+  const allOpenAPIs = results.flatMap(r => r.openAPIs || r.open_apis || []);
+  const allFingerprint = results.map(r => r.pageFingerprint || r.page_fingerprint || {});
+  const allLanguageInfo = results.map(r => r.languageInfo || r.language_info || {});
+  const allCopyright = results.map(r => r.copyright || {});
+  const allSchemaOrg = results.map(r => r.schemaOrg || r.schema_org || {});
+  const allMicrodata = results.flatMap(r => r.microdata || []);
+  const allLinkRelations = results.flatMap(r => r.linkRelations || r.link_relations || []);
+  const allResponseHeaders = results.map(r => r.responseHeaders || r.response_headers || {});
+  const siteIntel = results.find(r => r.siteIntel && Object.keys(r.siteIntel).length > 0)?.siteIntel
+                 || results.find(r => r.site_intel && Object.keys(r.site_intel).length > 0)?.site_intel
+                 || {};
+
   const renderTab = () => {
     switch (activeTab) {
       case 'overview': return <OverviewTab job={job} results={results} allLinks={allLinks} allImages={allImages} allScripts={allScripts} allLeaked={allLeaked} allSecurity={allSecurity} suggestions={uniqueSuggestions} />;
@@ -85,6 +111,10 @@ export default function ResultsTabs({ jobData }) {
       case 'contacts': return <ContactsTab emails={allEmails} phones={allPhones} social={allSocial} contactInfo={allContactInfo} />;
       case 'metadata': return <MetadataTab results={results} />;
       case 'tech': return <TechTab results={results} />;
+      case 'seo': return <SEOSchemaTab results={results} schemaOrg={allSchemaOrg} microdata={allMicrodata} breadcrumbs={allBreadcrumbs} linkRelations={allLinkRelations} languageInfo={allLanguageInfo} />;
+      case 'design': return <DesignIntelTab colorPalette={allColorPalette} fontInfo={allFontInfo} />;
+      case 'content': return <ContentTab pricing={allPricing} reviews={allReviews} faqs={allFaqs} rssFeeds={allRssFeeds} copyright={allCopyright} />;
+      case 'intel': return <SiteIntelTab siteIntel={siteIntel} apiEndpoints={allApiEndpoints} openAPIs={allOpenAPIs} responseHeaders={allResponseHeaders} fingerprints={allFingerprint} />;
       case 'extras': return <ExtrasTab comments={allComments} hidden={allHidden} iframes={allIframes} downloads={allDownloads} videos={allVideos} />;
       default: return null;
     }
@@ -1276,6 +1306,701 @@ function ExtrasTab({ comments, hidden, iframes, downloads, videos }) {
                 {v.poster && <span>Has poster</span>}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── SEO & Schema Tab ────────────────────────────────────────── */
+function SEOSchemaTab({ results, schemaOrg, microdata, breadcrumbs, linkRelations, languageInfo }) {
+  const [section, setSection] = useState('seo');
+  const sections = [
+    { id: 'seo', label: 'SEO Score' },
+    { id: 'schema', label: 'Schema.org' },
+    { id: 'microdata', label: 'Microdata' },
+    { id: 'breadcrumbs', label: 'Breadcrumbs' },
+    { id: 'language', label: 'Language' },
+    { id: 'linkrel', label: 'Link Relations' },
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-dark-700/50 text-gray-400 hover:text-gray-300 border border-dark-600/30'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'seo' && (
+        <div className="space-y-4">
+          {results.map((r, i) => {
+            const seo = r.seoScore || r.seo_score || {};
+            return (
+              <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-gray-300 text-sm font-medium truncate max-w-md">{r.pageUrl || r.page_url}</span>
+                  <span className={`text-2xl font-bold ${(seo.score || 0) >= 80 ? 'text-green-400' : (seo.score || 0) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                    {seo.score || 0}/100
+                  </span>
+                </div>
+                {seo.grade && <span className={`badge ${seo.grade === 'A+' || seo.grade === 'A' ? 'badge-green' : seo.grade === 'B' ? 'badge-blue' : 'badge-red'}`}>{seo.grade}</span>}
+                {seo.deductions && seo.deductions.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {seo.deductions.slice(0, 10).map((d, j) => (
+                      <div key={j} className="text-xs text-gray-400 flex items-center gap-2">
+                        <span className={`w-1.5 h-1.5 rounded-full ${d.severity === 'high' ? 'bg-red-500' : d.severity === 'medium' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                        {d.reason} <span className="text-gray-600">(-{d.points})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {section === 'schema' && (
+        <div className="space-y-3">
+          {schemaOrg.filter(s => s.schemas?.length > 0).length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No Schema.org data found</div>
+          ) : schemaOrg.map((s, i) => (
+            s.schemas?.length > 0 && (
+              <div key={i} className="space-y-2">
+                <div className="text-xs text-gray-500 font-medium">{s.count} schema(s) detected — Types: {s.types?.join(', ')}</div>
+                {s.schemas.map((schema, j) => (
+                  <div key={j} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="badge badge-blue">{Array.isArray(schema.type) ? schema.type.join(', ') : schema.type}</span>
+                      {schema.name && <span className="text-gray-300 text-sm">{schema.name}</span>}
+                    </div>
+                    {schema.description && <p className="text-gray-500 text-xs mb-2">{schema.description}</p>}
+                    {schema.url && <a href={schema.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-xs hover:underline block mb-2">{schema.url}</a>}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {schema.properties?.map((p, k) => <span key={k} className="badge badge-gray text-[10px]">{p}</span>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ))}
+        </div>
+      )}
+
+      {section === 'microdata' && (
+        <div className="space-y-3">
+          {microdata.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No microdata found</div>
+          ) : microdata.map((item, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              {item.type && <span className="badge badge-purple text-xs mb-2 inline-block">{item.type}</span>}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {Object.entries(item.properties || {}).map(([key, val], j) => (
+                  <div key={j} className="text-xs">
+                    <span className="text-gray-500">{key}: </span>
+                    <span className="text-gray-300 break-all">{String(val).substring(0, 100)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {section === 'breadcrumbs' && (
+        <div className="space-y-2">
+          {breadcrumbs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No breadcrumbs found</div>
+          ) : (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <div className="flex flex-wrap items-center gap-2">
+                {breadcrumbs.map((b, i) => (
+                  <span key={i} className="flex items-center gap-2">
+                    {i > 0 && <span className="text-gray-600">›</span>}
+                    {b.url ? (
+                      <a href={b.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline">{b.name}</a>
+                    ) : (
+                      <span className="text-gray-300 text-sm">{b.name}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'language' && (
+        <div className="space-y-3">
+          {languageInfo.map((lang, i) => (
+            lang.primary && (
+              <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><span className="text-gray-500">Primary: </span><span className="text-white font-medium">{lang.primary}</span></div>
+                  <div><span className="text-gray-500">Direction: </span><span className="text-gray-300">{lang.direction}</span></div>
+                  {lang.ogLocale && <div><span className="text-gray-500">OG Locale: </span><span className="text-gray-300">{lang.ogLocale}</span></div>}
+                  {lang.isMultilingual && <div><span className="text-green-400 text-xs">✓ Multilingual site</span></div>}
+                </div>
+                {lang.alternateLanguages?.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {lang.alternateLanguages.map((alt, j) => (
+                      <span key={j} className="badge badge-blue text-xs">{alt.lang}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+        </div>
+      )}
+
+      {section === 'linkrel' && (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {linkRelations.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No link relations found</div>
+          ) : linkRelations.map((lr, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-2.5 border border-dark-600/30 flex items-center gap-3">
+              <span className="badge badge-gray text-[10px] min-w-16 text-center">{lr.rel}</span>
+              <span className="text-gray-300 text-xs font-mono truncate flex-1">{lr.href || '—'}</span>
+              {lr.type && <span className="text-gray-600 text-[10px]">{lr.type}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Design Intel Tab ────────────────────────────────────────── */
+function DesignIntelTab({ colorPalette, fontInfo }) {
+  const [section, setSection] = useState('colors');
+  const sections = [
+    { id: 'colors', label: 'Color Palette' },
+    { id: 'fonts', label: 'Typography' },
+  ];
+
+  // Merge colors from all pages
+  const mergedColors = (() => {
+    const colorMap = new Map();
+    for (const p of colorPalette) {
+      for (const c of (p.colors || [])) {
+        colorMap.set(c.color, (colorMap.get(c.color) || 0) + (c.count || 1));
+      }
+    }
+    return [...colorMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([color, count]) => ({ color, count }));
+  })();
+
+  const cssVars = colorPalette.flatMap(p => p.cssVariables || []);
+  const themeColor = colorPalette.find(p => p.themeColor)?.themeColor;
+
+  // Merge fonts
+  const allGoogleFonts = [...new Set(fontInfo.flatMap(f => f.googleFonts || []))];
+  const allCustomFonts = [...new Set(fontInfo.flatMap(f => f.customFonts || []))];
+  const allFamilies = [...new Set(fontInfo.flatMap(f => f.families || []))];
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-dark-700/50 text-gray-400 hover:text-gray-300 border border-dark-600/30'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'colors' && (
+        <div className="space-y-4">
+          {themeColor && (
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-gray-500 text-sm">Theme color:</span>
+              <div className="w-8 h-8 rounded-lg border border-dark-500 shadow-lg" style={{ backgroundColor: themeColor }} />
+              <span className="text-white text-sm font-mono">{themeColor}</span>
+            </div>
+          )}
+          <div className="text-gray-500 text-xs mb-2">{mergedColors.length} unique colors detected</div>
+          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+            {mergedColors.map((c, i) => (
+              <div key={i} className="group relative">
+                <div className="w-full aspect-square rounded-lg border border-dark-500 shadow-md cursor-pointer hover:scale-110 transition-transform" style={{ backgroundColor: c.color }} />
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-dark-800 border border-dark-600 rounded px-1.5 py-0.5 text-[9px] text-white font-mono whitespace-nowrap z-10">
+                  {c.color} ({c.count}×)
+                </div>
+              </div>
+            ))}
+          </div>
+          {cssVars.length > 0 && (
+            <div className="mt-6">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">CSS Custom Properties</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {cssVars.map((v, i) => (
+                  <div key={i} className="bg-dark-750 rounded-lg px-3 py-2 border border-dark-600/30 flex items-center gap-3">
+                    <div className="w-5 h-5 rounded border border-dark-500 flex-shrink-0" style={{ backgroundColor: v.value }} />
+                    <span className="text-gray-500 text-xs font-mono flex-1 truncate">{v.name}</span>
+                    <span className="text-gray-300 text-xs font-mono">{v.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'fonts' && (
+        <div className="space-y-4">
+          {allGoogleFonts.length > 0 && (
+            <div>
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Google Fonts</h4>
+              <div className="flex flex-wrap gap-2">
+                {allGoogleFonts.map((f, i) => <span key={i} className="badge badge-blue">{f}</span>)}
+              </div>
+            </div>
+          )}
+          {allCustomFonts.length > 0 && (
+            <div>
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Custom @font-face</h4>
+              <div className="flex flex-wrap gap-2">
+                {allCustomFonts.map((f, i) => <span key={i} className="badge badge-purple">{f}</span>)}
+              </div>
+            </div>
+          )}
+          {allFamilies.length > 0 && (
+            <div>
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Font Families Used ({allFamilies.length})</h4>
+              <div className="space-y-1">
+                {allFamilies.map((f, i) => (
+                  <div key={i} className="bg-dark-750 rounded-lg px-3 py-2 border border-dark-600/30 text-gray-300 text-sm font-mono">{f}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          {allGoogleFonts.length === 0 && allCustomFonts.length === 0 && allFamilies.length === 0 && (
+            <div className="text-center py-8 text-gray-500 text-sm">No font information detected</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Content Tab ─────────────────────────────────────────────── */
+function ContentTab({ pricing, reviews, faqs, rssFeeds, copyright }) {
+  const [section, setSection] = useState('faqs');
+  const sections = [
+    { id: 'faqs', label: `FAQs (${faqs.length})` },
+    { id: 'pricing', label: `Pricing (${pricing.length})` },
+    { id: 'reviews', label: `Reviews (${reviews.length})` },
+    { id: 'rss', label: `RSS Feeds (${rssFeeds.length})` },
+    { id: 'copyright', label: 'Legal' },
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-dark-700/50 text-gray-400 hover:text-gray-300 border border-dark-600/30'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'faqs' && (
+        <div className="space-y-2">
+          {faqs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No FAQ content detected</div>
+          ) : faqs.map((f, i) => (
+            <details key={i} className="bg-dark-750 rounded-lg border border-dark-600/30 group">
+              <summary className="px-4 py-3 cursor-pointer text-gray-300 text-sm font-medium hover:text-white select-none flex items-center justify-between">
+                {f.question}
+                <span className="badge badge-gray text-[10px] ml-2">{f.source}</span>
+              </summary>
+              <div className="px-4 pb-3 text-gray-400 text-sm border-t border-dark-600/20 pt-2">{f.answer || 'No answer text'}</div>
+            </details>
+          ))}
+        </div>
+      )}
+
+      {section === 'pricing' && (
+        <div className="space-y-2">
+          {pricing.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No pricing data detected</div>
+          ) : pricing.map((p, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center justify-between">
+              <div>
+                <span className="text-white text-lg font-bold">{p.value}</span>
+                {p.context && <span className="text-gray-500 text-xs ml-3">{p.context}</span>}
+              </div>
+              {p.structured && <span className="badge badge-green text-[10px]">Structured</span>}
+              {p.currency && <span className="badge badge-blue text-[10px]">{p.currency}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {section === 'reviews' && (
+        <div className="space-y-2">
+          {reviews.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No reviews or ratings found</div>
+          ) : reviews.map((r, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30">
+              <div className="flex items-center gap-3">
+                <span className="badge badge-gray text-[10px]">{r.type}</span>
+                {r.ratingValue && <span className="text-amber-400 text-sm font-bold">★ {r.ratingValue}{r.bestRating ? `/${r.bestRating}` : ''}</span>}
+                {r.rating && <span className="text-amber-400 text-sm font-bold">★ {r.rating}</span>}
+                {r.reviewCount && <span className="text-gray-500 text-xs">({r.reviewCount} reviews)</span>}
+                {r.author && <span className="text-gray-400 text-xs">by {r.author}</span>}
+              </div>
+              {r.body && <p className="text-gray-400 text-xs mt-2">{r.body}</p>}
+              {r.itemName && <span className="text-gray-500 text-xs">for: {r.itemName}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {section === 'rss' && (
+        <div className="space-y-2">
+          {rssFeeds.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No RSS/Atom feeds discovered</div>
+          ) : rssFeeds.map((f, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center gap-3">
+              <span className="text-orange-400">📡</span>
+              <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline truncate flex-1">{f.url}</a>
+              {f.title && <span className="text-gray-500 text-xs">{f.title}</span>}
+              <span className="badge badge-gray text-[10px]">{f.type}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {section === 'copyright' && (
+        <div className="space-y-3">
+          {copyright.map((c, i) => (
+            c.notices?.length > 0 || c.legalLinks?.length > 0 ? (
+              <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 space-y-3">
+                {c.notices?.length > 0 && (
+                  <div>
+                    <h4 className="text-gray-500 text-xs font-medium mb-1">Copyright Notices</h4>
+                    {c.notices.map((n, j) => <p key={j} className="text-gray-300 text-sm">{n}</p>)}
+                  </div>
+                )}
+                {c.owner && <div><span className="text-gray-500 text-xs">Owner: </span><span className="text-white text-sm">{c.owner}</span></div>}
+                {c.year && <div><span className="text-gray-500 text-xs">Year: </span><span className="text-gray-300 text-sm">{c.year}</span></div>}
+                {c.license && <div><span className="text-gray-500 text-xs">License: </span><span className="text-cyan-400 text-sm">{c.license}</span></div>}
+                {c.legalLinks?.length > 0 && (
+                  <div>
+                    <h4 className="text-gray-500 text-xs font-medium mb-1">Legal Pages</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {c.legalLinks.map((l, j) => (
+                        <a key={j} href={l.url} target="_blank" rel="noopener noreferrer" className="badge badge-blue hover:bg-blue-500/30 cursor-pointer">{l.text}</a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null
+          ))}
+          {copyright.every(c => !c.notices?.length && !c.legalLinks?.length) && (
+            <div className="text-center py-8 text-gray-500 text-sm">No copyright or legal information found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Site Intel Tab ──────────────────────────────────────────── */
+function SiteIntelTab({ siteIntel, apiEndpoints, openAPIs, responseHeaders, fingerprints }) {
+  const [section, setSection] = useState('overview');
+  const hasDns = siteIntel?.dns && Object.keys(siteIntel.dns).length > 0;
+  const hasSsl = siteIntel?.ssl && Object.keys(siteIntel.ssl).length > 0;
+  const hasSitemap = siteIntel?.sitemap && (siteIntel.sitemap.totalUrls > 0 || siteIntel.sitemap.urls?.length > 0);
+  const hasRobots = siteIntel?.robots && Object.keys(siteIntel.robots).length > 0;
+  const hasSecurity = siteIntel?.security && Object.keys(siteIntel.security).length > 0;
+
+  const sections = [
+    { id: 'overview', label: 'Overview' },
+    ...(hasDns ? [{ id: 'dns', label: 'DNS' }] : []),
+    ...(hasSsl ? [{ id: 'ssl', label: 'SSL/TLS' }] : []),
+    ...(hasSitemap ? [{ id: 'sitemap', label: 'Sitemap' }] : []),
+    ...(hasRobots ? [{ id: 'robots', label: 'Robots.txt' }] : []),
+    ...(hasSecurity ? [{ id: 'security', label: 'Security' }] : []),
+    { id: 'apis', label: `APIs (${apiEndpoints.length})` },
+    { id: 'headers', label: 'Headers' },
+    { id: 'fingerprint', label: 'Fingerprint' },
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {sections.map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-dark-700/50 text-gray-400 hover:text-gray-300 border border-dark-600/30'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'overview' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {hasDns && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-emerald-400">{siteIntel.dns.records?.length || 0}</div>
+              <div className="text-gray-500 text-xs mt-1">DNS Records</div>
+            </div>
+          )}
+          {hasSsl && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className={`text-2xl font-bold ${siteIntel.ssl.isValid ? 'text-green-400' : 'text-red-400'}`}>{siteIntel.ssl.isValid ? '✓' : '✗'}</div>
+              <div className="text-gray-500 text-xs mt-1">SSL Valid</div>
+            </div>
+          )}
+          {hasSitemap && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className="text-2xl font-bold text-blue-400">{siteIntel.sitemap.totalUrls || 0}</div>
+              <div className="text-gray-500 text-xs mt-1">Sitemap URLs</div>
+            </div>
+          )}
+          <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+            <div className="text-2xl font-bold text-purple-400">{apiEndpoints.length}</div>
+            <div className="text-gray-500 text-xs mt-1">API Endpoints</div>
+          </div>
+          <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+            <div className="text-2xl font-bold text-cyan-400">{openAPIs.length}</div>
+            <div className="text-gray-500 text-xs mt-1">OpenAPI/Swagger</div>
+          </div>
+          {hasSecurity && siteIntel.security.securityScore && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 text-center">
+              <div className={`text-2xl font-bold ${siteIntel.security.securityScore.grade?.startsWith('A') ? 'text-green-400' : siteIntel.security.securityScore.grade?.startsWith('B') ? 'text-amber-400' : 'text-red-400'}`}>
+                {siteIntel.security.securityScore.grade || '—'}
+              </div>
+              <div className="text-gray-500 text-xs mt-1">Security Grade</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'dns' && hasDns && (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {siteIntel.dns.ipAddresses?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">IP Addresses</h4>
+              <div className="flex flex-wrap gap-2">
+                {siteIntel.dns.ipAddresses.map((ip, i) => <span key={i} className="badge badge-green font-mono">{ip}</span>)}
+              </div>
+            </div>
+          )}
+          {siteIntel.dns.records?.map((r, i) => (
+            <div key={i} className="bg-dark-750 rounded-lg px-4 py-2.5 border border-dark-600/30 flex items-center gap-3">
+              <span className="badge badge-gray text-[10px] min-w-12 text-center">{r.type}</span>
+              <span className="text-gray-300 text-xs font-mono truncate flex-1">{typeof r.value === 'object' ? JSON.stringify(r.value) : r.value}</span>
+              {r.ttl && <span className="text-gray-600 text-[10px]">TTL: {r.ttl}</span>}
+            </div>
+          ))}
+          {siteIntel.dns.emailProvider && (
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-sm">
+              <span className="text-gray-500">Email Provider: </span><span className="text-white">{siteIntel.dns.emailProvider}</span>
+            </div>
+          )}
+          {siteIntel.dns.dnsProvider && (
+            <div className="bg-dark-750 rounded-lg p-3 border border-dark-600/30 text-sm">
+              <span className="text-gray-500">DNS Provider: </span><span className="text-white">{siteIntel.dns.dnsProvider}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'ssl' && !hasSsl && (
+        <div className="text-center py-8 text-gray-500 text-sm">No SSL/TLS data available. Run a Deep or ELITE scan with Site Intel enabled.</div>
+      )}
+
+      {section === 'ssl' && hasSsl && (
+        <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-gray-500">Issuer: </span><span className="text-white">{(typeof siteIntel.ssl.issuer === 'object' ? siteIntel.ssl.issuer?.O || siteIntel.ssl.issuer?.CN || JSON.stringify(siteIntel.ssl.issuer) : siteIntel.ssl.issuer) || '—'}</span></div>
+            <div><span className="text-gray-500">Valid: </span><span className={siteIntel.ssl.isValid ? 'text-green-400' : 'text-red-400'}>{siteIntel.ssl.isValid ? 'Yes' : 'No'}</span></div>
+            <div><span className="text-gray-500">Subject: </span><span className="text-gray-300">{(typeof siteIntel.ssl.subject === 'object' ? siteIntel.ssl.subject?.CN || JSON.stringify(siteIntel.ssl.subject) : siteIntel.ssl.subject) || '—'}</span></div>
+            <div><span className="text-gray-500">Serial: </span><span className="text-gray-300 text-xs font-mono">{siteIntel.ssl.serialNumber || '—'}</span></div>
+            <div><span className="text-gray-500">Valid From: </span><span className="text-gray-300">{siteIntel.ssl.validFrom || '—'}</span></div>
+            <div><span className="text-gray-500">Valid Until: </span><span className="text-gray-300">{siteIntel.ssl.validTo || '—'}</span></div>
+            {siteIntel.ssl.daysUntilExpiry != null && (
+              <div><span className="text-gray-500">Days Until Expiry: </span><span className={siteIntel.ssl.daysUntilExpiry < 30 ? 'text-red-400' : 'text-green-400'}>{siteIntel.ssl.daysUntilExpiry}</span></div>
+            )}
+            {siteIntel.ssl.isExpired && <div><span className="text-red-400 font-bold">⚠ Certificate is EXPIRED</span></div>}
+            {siteIntel.ssl.isExpiringSoon && !siteIntel.ssl.isExpired && <div><span className="text-amber-400 font-bold">⚠ Expiring soon</span></div>}
+            {siteIntel.ssl.protocol && <div><span className="text-gray-500">Protocol: </span><span className="text-gray-300">{siteIntel.ssl.protocol}</span></div>}
+            {siteIntel.ssl.cipher && <div><span className="text-gray-500">Cipher: </span><span className="text-gray-300 text-xs font-mono">{typeof siteIntel.ssl.cipher === 'object' ? siteIntel.ssl.cipher.name || JSON.stringify(siteIntel.ssl.cipher) : siteIntel.ssl.cipher}</span></div>}
+            {siteIntel.ssl.fingerprint && <div className="col-span-2"><span className="text-gray-500">Fingerprint: </span><span className="text-gray-300 text-xs font-mono break-all">{siteIntel.ssl.fingerprint}</span></div>}
+          </div>
+          {siteIntel.ssl.altNames?.length > 0 && (
+            <div className="mt-3">
+              <h4 className="text-gray-500 text-xs font-medium mb-1">Subject Alt Names ({siteIntel.ssl.altNames.length})</h4>
+              <div className="flex flex-wrap gap-1">
+                {siteIntel.ssl.altNames.slice(0, 30).map((n, i) => <span key={i} className="badge badge-gray text-[10px]">{n}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'sitemap' && hasSitemap && (
+        <div className="space-y-2">
+          <div className="text-gray-500 text-xs mb-2">Total URLs in sitemap: {siteIntel.sitemap.totalUrls}</div>
+          <div className="max-h-96 overflow-y-auto space-y-1">
+            {(siteIntel.sitemap.urls || []).slice(0, 100).map((u, i) => (
+              <div key={i} className="bg-dark-750 rounded-lg px-3 py-2 border border-dark-600/30">
+                <a href={u} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-xs font-mono hover:underline truncate block">{u}</a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {section === 'robots' && hasRobots && (
+        <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+          <pre className="text-gray-300 text-xs font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+            {JSON.stringify(siteIntel.robots, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {section === 'security' && hasSecurity && (
+        <div className="space-y-3">
+          {siteIntel.security.securityScore && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <div className="flex items-center gap-4 mb-3">
+                <span className={`text-3xl font-bold ${siteIntel.security.securityScore.grade?.startsWith('A') ? 'text-green-400' : 'text-amber-400'}`}>
+                  {siteIntel.security.securityScore.grade}
+                </span>
+                <span className="text-gray-300 text-sm">{siteIntel.security.securityScore.score}/100</span>
+              </div>
+              {siteIntel.security.securityScore.details && (
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(siteIntel.security.securityScore.details).map(([key, val], i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className={`w-2 h-2 rounded-full ${val ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-gray-400">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {siteIntel.security.redirectChain?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Redirect Chain</h4>
+              {siteIntel.security.redirectChain.map((r, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs text-gray-300 mb-1">
+                  <span className="badge badge-gray text-[10px]">{r.status}</span>
+                  <span className="font-mono truncate">{r.url}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {siteIntel.security.cookies?.length > 0 && (
+            <div className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+              <h4 className="text-gray-400 text-xs font-medium mb-2">Cookies ({siteIntel.security.cookies.length})</h4>
+              <div className="space-y-2">
+                {siteIntel.security.cookies.slice(0, 15).map((c, i) => (
+                  <div key={i} className="text-xs flex items-center gap-2">
+                    <span className="text-white font-mono">{c.name}</span>
+                    <div className="flex gap-1">
+                      {c.secure && <span className="badge badge-green text-[9px]">Secure</span>}
+                      {c.httpOnly && <span className="badge badge-blue text-[9px]">HttpOnly</span>}
+                      {c.sameSite && <span className="badge badge-gray text-[9px]">SameSite={c.sameSite}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'apis' && (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {apiEndpoints.length === 0 && openAPIs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No API endpoints discovered</div>
+          ) : (
+            <>
+              {openAPIs.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-gray-400 text-xs font-medium mb-2">OpenAPI / Swagger</h4>
+                  {openAPIs.map((a, i) => (
+                    <div key={i} className="bg-dark-750 rounded-lg px-4 py-2.5 border border-dark-600/30 flex items-center gap-3 mb-1">
+                      <span className="badge badge-green text-[10px]">OpenAPI</span>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline truncate flex-1">{a.url}</a>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {apiEndpoints.map((ep, i) => (
+                <div key={i} className="bg-dark-750 rounded-lg px-4 py-2.5 border border-dark-600/30 flex items-center gap-3">
+                  <span className={`badge ${ep.method === 'POST' ? 'badge-amber' : 'badge-blue'} text-[10px] min-w-12 text-center`}>{ep.method}</span>
+                  <span className="text-gray-300 text-xs font-mono truncate flex-1">{ep.url}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {section === 'headers' && (
+        <div className="space-y-3">
+          {responseHeaders.map((rh, i) => {
+            if (!rh || Object.keys(rh).length === 0) return null;
+            return (
+              <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {rh.server && <div><span className="text-gray-500">Server: </span><span className="text-white">{rh.server}</span></div>}
+                  {rh.poweredBy && <div><span className="text-gray-500">Powered By: </span><span className="text-amber-400">{rh.poweredBy}</span></div>}
+                  {rh.contentEncoding && <div><span className="text-gray-500">Encoding: </span><span className="text-gray-300">{rh.contentEncoding}</span></div>}
+                  <div><span className="text-gray-500">Compressed: </span><span className={rh.isCompressed ? 'text-green-400' : 'text-red-400'}>{rh.isCompressed ? 'Yes' : 'No'}</span></div>
+                  <div><span className="text-gray-500">Cached: </span><span className={rh.isCached ? 'text-green-400' : 'text-gray-400'}>{rh.isCached ? 'Yes' : 'No'}</span></div>
+                </div>
+                {rh.customHeaders && Object.keys(rh.customHeaders).length > 0 && (
+                  <div className="mt-3 border-t border-dark-600/30 pt-3">
+                    <h4 className="text-gray-500 text-xs font-medium mb-2">Custom Headers</h4>
+                    <div className="space-y-1">
+                      {Object.entries(rh.customHeaders).slice(0, 20).map(([k, v], j) => (
+                        <div key={j} className="text-xs flex gap-2">
+                          <span className="text-purple-400 font-mono min-w-36">{k}:</span>
+                          <span className="text-gray-400 font-mono truncate">{String(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {responseHeaders.every(rh => !rh || Object.keys(rh).length === 0) && (
+            <div className="text-center py-8 text-gray-500 text-sm">No response header data available</div>
+          )}
+        </div>
+      )}
+
+      {section === 'fingerprint' && (
+        <div className="space-y-2">
+          {fingerprints.filter(f => f.contentHash).length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No fingerprint data available</div>
+          ) : fingerprints.map((fp, i) => (
+            fp.contentHash ? (
+              <div key={i} className="bg-dark-750 rounded-lg p-4 border border-dark-600/30 grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-gray-500">Content Hash: </span><span className="text-emerald-400 font-mono text-xs">{fp.contentHash}</span></div>
+                <div><span className="text-gray-500">Full Hash: </span><span className="text-gray-300 font-mono text-xs">{fp.fullHash}</span></div>
+                <div><span className="text-gray-500">Content Length: </span><span className="text-gray-300">{fp.contentLength?.toLocaleString()} chars</span></div>
+                <div><span className="text-gray-500">HTML Size: </span><span className="text-gray-300">{fp.htmlLength?.toLocaleString()} chars</span></div>
+              </div>
+            ) : null
           ))}
         </div>
       )}

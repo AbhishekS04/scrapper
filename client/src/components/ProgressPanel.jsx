@@ -32,6 +32,7 @@ export default function ProgressPanel({ progress, stats, status }) {
       case 'completed': return '★';
       case 'failed': return '✗';
       case 'status': return '●';
+      case 'intel': return '🌐';
       default: return '·';
     }
   };
@@ -46,6 +47,7 @@ export default function ProgressPanel({ progress, stats, status }) {
       case 'completed': return 'text-white';
       case 'failed': return 'text-red-400';
       case 'status': return 'text-amber-400';
+      case 'intel': return 'text-emerald-400';
       default: return 'text-gray-500';
     }
   };
@@ -60,6 +62,7 @@ export default function ProgressPanel({ progress, stats, status }) {
       case 'completed': return `Job completed! ${entry.pagesScraped} pages scraped.`;
       case 'failed': return `Job failed: ${entry.message}`;
       case 'status': return entry.message;
+      case 'intel': return entry.message;
       default: return JSON.stringify(entry);
     }
   };

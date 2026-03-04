@@ -1,11 +1,13 @@
 /**
- * Scraper Engine Service
+ * Scraper Engine Service — ELITE Edition
  * Uses Playwright for JS-rendered pages, Axios+Cheerio for static pages
- * Supports deep crawling, link following, and real-time progress via SSE
+ * Features: smart crawling, site intelligence, concurrent fetching,
+ * retry with backoff, sitemap-based URL discovery, and deep extraction
  */
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { extractPageData } from './extractor.js';
+import { gatherSiteIntelligence } from './siteIntel.js';
 import { db } from './db.js';
 import { scrapeJobs, scrapeResults } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -51,6 +53,37 @@ function getRandomUserAgent() {
 function randomDelay(baseMs) {
   const jitter = Math.floor(Math.random() * baseMs * 0.5);
   return baseMs + jitter;
+}
+
+/**
+ * Retry wrapper with exponential backoff
+ */
+async function withRetry(fn, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt === maxRetries) throw error;
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+/**
+ * Process URLs concurrently with a concurrency limit
+ */
+async function processPool(items, fn, concurrency = 3) {
+  const results = [];
+  let index = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (index < items.length) {
+      const i = index++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 /**
@@ -280,6 +313,8 @@ export async function startScrapeJob(jobId, url, options = {}) {
     extractImages = true,
     extractEmailsOpt = true,
     depth = parseInt(process.env.DEFAULT_DEPTH || '2'),
+    siteIntel: runSiteIntel = true,
+    concurrency = 3,
   } = options;
 
   const maxPages = parseInt(process.env.MAX_PAGES_PER_JOB || '100');
@@ -288,6 +323,7 @@ export async function startScrapeJob(jobId, url, options = {}) {
   const visited = new Set();
   const queue = [{ url, currentDepth: 0 }];
   let pagesScraped = 0;
+  let siteIntelData = null;
 
   try {
     // Update job to running
@@ -303,6 +339,45 @@ export async function startScrapeJob(jobId, url, options = {}) {
     });
 
     const baseUrl = new URL(url);
+
+    // ─── ELITE: Gather site intelligence first ───
+    if (runSiteIntel && (deepScan || followLinks)) {
+      sendProgress(jobId, {
+        type: 'intel',
+        message: 'Gathering site intelligence (DNS, SSL, sitemap, robots.txt)...',
+      });
+      try {
+        siteIntelData = await gatherSiteIntelligence(url);
+
+        // Add sitemap URLs to crawl queue
+        if (siteIntelData?.sitemap?.urls && Array.isArray(siteIntelData.sitemap.urls)) {
+          const sitemapUrls = siteIntelData.sitemap.urls
+            .filter(u => {
+              try { return new URL(u).hostname === baseUrl.hostname; } catch { return false; }
+            })
+            .slice(0, maxPages);
+
+          for (const sitemapUrl of sitemapUrls) {
+            const norm = sitemapUrl.replace(/\/$/, '');
+            if (!visited.has(norm)) {
+              queue.push({ url: sitemapUrl, currentDepth: 1 });
+            }
+          }
+
+          sendProgress(jobId, {
+            type: 'intel',
+            message: `Site intel complete: found ${sitemapUrls.length} URLs from sitemap, ` +
+                     `DNS records: ${siteIntelData?.dns?.records?.length || 0}, ` +
+                     `SSL: ${siteIntelData?.ssl?.issuer || 'N/A'}`,
+          });
+        }
+      } catch (error) {
+        sendProgress(jobId, {
+          type: 'intel',
+          message: `Site intel partially failed: ${error.message?.substring(0, 100)}`,
+        });
+      }
+    }
 
     while (queue.length > 0 && pagesScraped < maxPages) {
       const { url: currentUrl, currentDepth } = queue.shift();
@@ -339,8 +414,8 @@ export async function startScrapeJob(jobId, url, options = {}) {
       });
 
       try {
-        // Fetch the page
-        const result = await smartFetch(normalizedUrl);
+        // Fetch the page with retry
+        const result = await withRetry(() => smartFetch(normalizedUrl), 2, requestDelay);
 
         if (typeof result.html !== 'string') {
           sendProgress(jobId, {
@@ -398,10 +473,29 @@ export async function startScrapeJob(jobId, url, options = {}) {
           suggestions: pageData.suggestions || [],
           contactInfo: pageData.contactInfo || {},
           seoScore: pageData.seoScore || {},
-          // ─── NEW: Performance & Quality Metrics ───
+          // ─── Performance & Quality Metrics ───
           performanceMetrics: pageData.performanceMetrics || {},
           accessibilityScore: pageData.accessibilityScore || {},
           contentQuality: pageData.contentQuality || {},
+          // ─── ELITE: Deep extraction fields ───
+          rssFeeds: pageData.rssFeeds || [],
+          apiEndpoints: pageData.apiEndpoints || [],
+          colorPalette: pageData.colorPalette || {},
+          fontInfo: pageData.fontInfo || {},
+          pricing: pageData.pricing || [],
+          reviews: pageData.reviews || [],
+          faqs: pageData.faqs || [],
+          breadcrumbs: pageData.breadcrumbs || [],
+          navigation: pageData.navigation || {},
+          openAPIs: pageData.openAPIs || [],
+          pageFingerprint: pageData.pageFingerprint || {},
+          languageInfo: pageData.languageInfo || {},
+          copyright: pageData.copyright || {},
+          schemaOrg: pageData.schemaOrg || {},
+          microdata: pageData.microdata || [],
+          linkRelations: pageData.linkRelations || [],
+          responseHeaders: pageData.responseHeaders || {},
+          siteIntel: (pagesScraped === 0 && siteIntelData) ? siteIntelData : {},
         });
 
         pagesScraped++;

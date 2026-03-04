@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 
 const SCAN_PRESETS = [
-  { key: 'quick', label: 'Quick Scan', desc: 'Single page, basic extraction', icon: '⚡', depth: 1, options: { deepScan: false, followLinks: false } },
-  { key: 'standard', label: 'Standard', desc: 'Follow links, 2 levels deep', icon: '🔍', depth: 2, options: { deepScan: false, followLinks: true } },
-  { key: 'deep', label: 'Deep Scan', desc: 'Full crawl, 4 levels deep', icon: '🕵️', depth: 4, options: { deepScan: true, followLinks: true } },
+  { key: 'quick', label: 'Quick Scan', desc: 'Single page, basic extraction', icon: '⚡', depth: 1, options: { deepScan: false, followLinks: false, siteIntel: false } },
+  { key: 'standard', label: 'Standard', desc: 'Follow links, 2 levels deep', icon: '🔍', depth: 2, options: { deepScan: false, followLinks: true, siteIntel: false } },
+  { key: 'deep', label: 'Deep Scan', desc: 'Full crawl, 4 levels deep', icon: '🕵️', depth: 4, options: { deepScan: true, followLinks: true, siteIntel: true } },
+  { key: 'elite', label: 'ELITE', desc: 'Maximum intelligence gathering', icon: '🏴‍☠️', depth: 5, options: { deepScan: true, followLinks: true, siteIntel: true } },
 ];
 
 const OPTION_GROUPS = [
@@ -26,6 +27,12 @@ const OPTION_GROUPS = [
       { key: 'extractIframes', label: 'Iframes', icon: '📦', desc: 'Detect embedded iframes' },
     ],
   },
+  {
+    title: 'Site Intelligence',
+    items: [
+      { key: 'siteIntel', label: 'Full Intel', icon: '🌐', desc: 'DNS, SSL, sitemap, robots.txt analysis' },
+    ],
+  },
 ];
 
 export default function URLInput({ onSubmit, loading }) {
@@ -45,6 +52,7 @@ export default function URLInput({ onSubmit, loading }) {
     securityAudit: true,
     extractHidden: true,
     extractIframes: true,
+    siteIntel: false,
     depth: 2,
   });
   const inputRef = useRef(null);

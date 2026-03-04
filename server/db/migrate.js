@@ -92,6 +92,25 @@ async function migrate() {
       { name: 'performance_metrics', defaultVal: '{}' },
       { name: 'accessibility_score', defaultVal: '{}' },
       { name: 'content_quality', defaultVal: '{}' },
+      // ─── ELITE: Deep extraction columns ───
+      { name: 'rss_feeds', defaultVal: '[]' },
+      { name: 'api_endpoints', defaultVal: '[]' },
+      { name: 'color_palette', defaultVal: '{}' },
+      { name: 'font_info', defaultVal: '{}' },
+      { name: 'pricing', defaultVal: '[]' },
+      { name: 'reviews', defaultVal: '[]' },
+      { name: 'faqs', defaultVal: '[]' },
+      { name: 'breadcrumbs', defaultVal: '[]' },
+      { name: 'navigation', defaultVal: '{}' },
+      { name: 'open_apis', defaultVal: '[]' },
+      { name: 'page_fingerprint', defaultVal: '{}' },
+      { name: 'language_info', defaultVal: '{}' },
+      { name: 'copyright', defaultVal: '{}' },
+      { name: 'schema_org', defaultVal: '{}' },
+      { name: 'microdata', defaultVal: '[]' },
+      { name: 'link_relations', defaultVal: '[]' },
+      { name: 'response_headers', defaultVal: '{}' },
+      { name: 'site_intel', defaultVal: '{}' },
     ];
     for (const col of advancedCols) {
       const rows = await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name=${col.name}`;

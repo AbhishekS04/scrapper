@@ -1,9 +1,12 @@
 /**
- * Data Extractor Service — Advanced Edition
- * Extracts all structured data, leaked/sensitive data, scripts, comments,
- * security info, and more from parsed HTML using Cheerio
+ * Data Extractor Service — ELITE Edition
+ * Extracts absolutely everything possible from parsed HTML using Cheerio:
+ * structured data, leaked/sensitive data, scripts, comments, security info,
+ * RSS feeds, API endpoints, color palette, fonts, pricing, reviews, FAQs,
+ * navigation structure, breadcrumbs, page fingerprint, and more
  */
 import * as cheerio from 'cheerio';
+import crypto from 'crypto';
 import { detectTechStack } from './techDetector.js';
 
 /**
@@ -44,6 +47,24 @@ export function extractPageData(html, pageUrl, headers = {}) {
     performanceMetrics: extractPerformanceMetrics($, html, headers),
     accessibilityScore: calculateAccessibilityScore($),
     contentQuality: analyzeContentQuality($, html),
+    // ─── NEW: Elite Extraction Categories ───
+    rssFeeds: extractRSSFeeds($, baseUrl),
+    apiEndpoints: extractAPIEndpoints($, html, baseUrl),
+    colorPalette: extractColorPalette($, html),
+    fontInfo: extractFontInfo($, html),
+    pricing: extractPricing($),
+    reviews: extractReviews($),
+    faqs: extractFAQs($),
+    breadcrumbs: extractBreadcrumbs($),
+    navigation: extractNavigationStructure($, baseUrl),
+    openAPIs: extractOpenAPIs($, html, baseUrl),
+    pageFingerprint: generatePageFingerprint(html),
+    languageInfo: detectLanguage($, html),
+    copyright: extractCopyright($, html),
+    schemaOrg: extractSchemaOrg($),
+    microdata: extractMicrodata($),
+    linkRelations: extractLinkRelations($, baseUrl),
+    responseHeaders: analyzeResponseHeaders(headers),
   };
 
   // Generate suggestions based on all extracted data
@@ -2355,4 +2376,880 @@ function calculateSEOScore($, data) {
       bonuses: bonuses.length,
     }
   };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ELITE EXTRACTION FUNCTIONS — Maximum data extraction
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Extract RSS/Atom feed links
+ */
+function extractRSSFeeds($, baseUrl) {
+  const feeds = [];
+  const seen = new Set();
+
+  // Standard RSS/Atom link tags
+  $('link[type="application/rss+xml"], link[type="application/atom+xml"], link[type="application/feed+json"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href || seen.has(href)) return;
+    seen.add(href);
+    let absoluteUrl;
+    try { absoluteUrl = new URL(href, baseUrl.origin).href; } catch { absoluteUrl = href; }
+    feeds.push({
+      url: absoluteUrl,
+      title: $(el).attr('title') || null,
+      type: $(el).attr('type'),
+    });
+  });
+
+  // Look for common feed URL patterns in links
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
+    const lower = href.toLowerCase();
+    if (lower.includes('/feed') || lower.includes('/rss') || lower.includes('/atom') || lower.endsWith('.rss') || lower.endsWith('.xml')) {
+      if (seen.has(href)) return;
+      seen.add(href);
+      let absoluteUrl;
+      try { absoluteUrl = new URL(href, baseUrl.origin).href; } catch { absoluteUrl = href; }
+      feeds.push({ url: absoluteUrl, title: $(el).text().trim() || 'Feed', type: 'discovered' });
+    }
+  });
+
+  return feeds.slice(0, 20);
+}
+
+/**
+ * Extract API endpoint references from page source
+ */
+function extractAPIEndpoints($, html, baseUrl) {
+  const endpoints = new Set();
+  const apiPatterns = [
+    /["'](\/api\/[^"'\s<>]{2,100})["']/gi,
+    /["'](\/v[1-9]\/[^"'\s<>]{2,100})["']/gi,
+    /["'](\/graphql\/?[^"'\s<>]{0,100})["']/gi,
+    /["'](\/rest\/[^"'\s<>]{2,100})["']/gi,
+    /fetch\s*\(\s*["']([^"'\s]{5,200})["']/gi,
+    /axios\.[a-z]+\s*\(\s*["']([^"'\s]{5,200})["']/gi,
+    /\.get\s*\(\s*["'](\/[^"'\s]{3,200})["']/gi,
+    /\.post\s*\(\s*["'](\/[^"'\s]{3,200})["']/gi,
+    /["'](https?:\/\/[^"'\s<>]*\/api\/[^"'\s<>]{2,100})["']/gi,
+    /["'](https?:\/\/[^"'\s<>]*\/v[1-9]\/[^"'\s<>]{2,100})["']/gi,
+  ];
+
+  // Search in inline scripts only
+  const scriptContent = [];
+  $('script:not([src])').each((_, el) => {
+    const content = $(el).html();
+    if (content) scriptContent.push(content);
+  });
+  const scriptText = scriptContent.join('\n');
+
+  for (const pattern of apiPatterns) {
+    let match;
+    while ((match = pattern.exec(scriptText)) !== null) {
+      const url = match[1].trim();
+      if (url.length > 3 && url.length < 300 && !url.includes('{{') && !url.includes('${')) {
+        endpoints.add(url);
+      }
+    }
+  }
+
+  return [...endpoints].slice(0, 50).map(url => {
+    let absoluteUrl = url;
+    if (url.startsWith('/')) {
+      try { absoluteUrl = new URL(url, baseUrl.origin).href; } catch {}
+    }
+    const method = url.includes('graphql') ? 'POST' : 'GET';
+    return { url: absoluteUrl, originalPath: url, method };
+  });
+}
+
+/**
+ * Extract color palette from CSS
+ */
+function extractColorPalette($, html) {
+  const colors = new Map();
+
+  // From inline styles and style blocks
+  const allCSS = [];
+  $('style').each((_, el) => { allCSS.push($(el).html() || ''); });
+  $('[style]').each((_, el) => { allCSS.push($(el).attr('style') || ''); });
+  const cssText = allCSS.join('\n');
+
+  // Hex colors
+  const hexRegex = /#([0-9a-fA-F]{3,8})\b/g;
+  let match;
+  while ((match = hexRegex.exec(cssText)) !== null) {
+    const hex = match[0].toLowerCase();
+    if (hex.length >= 4) colors.set(hex, (colors.get(hex) || 0) + 1);
+  }
+
+  // RGB/RGBA colors
+  const rgbRegex = /rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/gi;
+  while ((match = rgbRegex.exec(cssText)) !== null) {
+    const r = parseInt(match[1]), g = parseInt(match[2]), b = parseInt(match[3]);
+    if (r <= 255 && g <= 255 && b <= 255) {
+      const hex = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+      colors.set(hex, (colors.get(hex) || 0) + 1);
+    }
+  }
+
+  // HSL colors
+  const hslRegex = /hsla?\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?/gi;
+  while ((match = hslRegex.exec(cssText)) !== null) {
+    colors.set(`hsl(${match[1]},${match[2]}%,${match[3]}%)`, (colors.get(`hsl(${match[1]},${match[2]}%,${match[3]}%)`) || 0) + 1);
+  }
+
+  // CSS custom properties (variables) for colors
+  const cssVarRegex = /--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
+  const cssVariables = [];
+  while ((match = cssVarRegex.exec(cssText)) !== null) {
+    cssVariables.push({ name: `--${match[1]}`, value: match[2] });
+  }
+
+  // Meta theme-color
+  const themeColor = $('meta[name="theme-color"]').attr('content');
+
+  // Sort by frequency
+  const sorted = [...colors.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 30)
+    .map(([color, count]) => ({ color, count }));
+
+  return {
+    colors: sorted,
+    totalUnique: colors.size,
+    themeColor: themeColor || null,
+    cssVariables: cssVariables.slice(0, 20),
+  };
+}
+
+/**
+ * Extract font information
+ */
+function extractFontInfo($, html) {
+  const fonts = {
+    families: [],
+    googleFonts: [],
+    adobeFonts: [],
+    customFonts: [],
+    fontFaceDeclarations: [],
+  };
+
+  // Google Fonts links
+  $('link[href*="fonts.googleapis.com"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const familyMatch = href.match(/family=([^&]+)/);
+    if (familyMatch) {
+      const families = decodeURIComponent(familyMatch[1]).split('|');
+      families.forEach(f => {
+        const name = f.split(':')[0].replace(/\+/g, ' ');
+        if (name && !fonts.googleFonts.includes(name)) fonts.googleFonts.push(name);
+      });
+    }
+  });
+
+  // Adobe Fonts (Typekit)
+  $('link[href*="use.typekit.net"]').each((_, el) => {
+    fonts.adobeFonts.push($(el).attr('href'));
+  });
+
+  // @font-face declarations
+  const allCSS = [];
+  $('style').each((_, el) => { allCSS.push($(el).html() || ''); });
+  const cssText = allCSS.join('\n');
+
+  const fontFaceRegex = /@font-face\s*\{[^}]*font-family\s*:\s*['"]?([^'";}]+)/gi;
+  let fmatch;
+  while ((fmatch = fontFaceRegex.exec(cssText)) !== null) {
+    const name = fmatch[1].trim();
+    if (name && !fonts.customFonts.includes(name)) {
+      fonts.customFonts.push(name);
+      fonts.fontFaceDeclarations.push(name);
+    }
+  }
+
+  // Font families from computed body style
+  const bodyStyle = $('body').attr('style') || '';
+  const fontFamilyMatch = bodyStyle.match(/font-family\s*:\s*([^;]+)/i);
+  if (fontFamilyMatch) {
+    fonts.families.push(fontFamilyMatch[1].trim());
+  }
+
+  // From CSS rules
+  const cssFontRegex = /font-family\s*:\s*['"]?([^'";}\n]+)/gi;
+  const fontSet = new Set();
+  while ((fmatch = cssFontRegex.exec(cssText)) !== null) {
+    const family = fmatch[1].trim();
+    if (family && family.length < 200) fontSet.add(family);
+  }
+  fonts.families = [...fontSet].slice(0, 20);
+
+  return fonts;
+}
+
+/**
+ * Extract pricing information
+ */
+function extractPricing($) {
+  const prices = [];
+
+  // Look for price patterns in text
+  const pricePatterns = [
+    /\$\s?\d{1,7}(?:[.,]\d{1,2})?/g,
+    /€\s?\d{1,7}(?:[.,]\d{1,2})?/g,
+    /£\s?\d{1,7}(?:[.,]\d{1,2})?/g,
+    /₹\s?\d{1,9}(?:[.,]\d{1,2})?/g,
+    /¥\s?\d{1,9}(?:[.,]\d{1,2})?/g,
+    /USD\s?\d{1,7}(?:[.,]\d{1,2})?/gi,
+    /\d{1,7}(?:[.,]\d{2})?\s?(?:USD|EUR|GBP|INR|JPY)/gi,
+  ];
+
+  // Look in pricing-related containers
+  const pricingSelectors = [
+    '[class*="price"]', '[class*="pricing"]', '[class*="cost"]',
+    '[class*="amount"]', '[id*="price"]', '[data-price]',
+    '.plan', '.tier', '.package',
+  ];
+
+  const priceElements = new Set();
+  for (const sel of pricingSelectors) {
+    try {
+      $(sel).each((_, el) => {
+        const text = $(el).text().trim();
+        if (text.length < 500) priceElements.add(text);
+      });
+    } catch {}
+  }
+
+  // Extract prices from pricing elements
+  for (const text of priceElements) {
+    for (const pattern of pricePatterns) {
+      const matches = text.match(pattern);
+      if (matches) {
+        matches.forEach(m => {
+          if (!prices.some(p => p.value === m)) {
+            prices.push({ value: m, context: text.substring(0, 100) });
+          }
+        });
+      }
+    }
+  }
+
+  // Also check JSON-LD for product pricing
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item.offers) {
+          const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
+          for (const offer of offers) {
+            if (offer.price) {
+              prices.push({
+                value: `${offer.priceCurrency || '$'}${offer.price}`,
+                context: item.name || 'Product',
+                structured: true,
+                currency: offer.priceCurrency,
+                availability: offer.availability,
+              });
+            }
+          }
+        }
+        // Check @graph
+        if (item['@graph']) {
+          for (const node of item['@graph']) {
+            if (node.offers) {
+              const offers = Array.isArray(node.offers) ? node.offers : [node.offers];
+              for (const offer of offers) {
+                if (offer.price) {
+                  prices.push({
+                    value: `${offer.priceCurrency || '$'}${offer.price}`,
+                    context: node.name || 'Product',
+                    structured: true,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  });
+
+  return prices.slice(0, 50);
+}
+
+/**
+ * Extract reviews and ratings
+ */
+function extractReviews($) {
+  const reviews = [];
+
+  // From JSON-LD
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        // Aggregate rating
+        if (item.aggregateRating) {
+          reviews.push({
+            type: 'aggregate',
+            ratingValue: item.aggregateRating.ratingValue,
+            bestRating: item.aggregateRating.bestRating || 5,
+            reviewCount: item.aggregateRating.reviewCount || item.aggregateRating.ratingCount,
+            itemName: item.name,
+          });
+        }
+        // Individual reviews
+        if (item.review) {
+          const revs = Array.isArray(item.review) ? item.review : [item.review];
+          for (const rev of revs.slice(0, 20)) {
+            reviews.push({
+              type: 'review',
+              author: rev.author?.name || rev.author || null,
+              rating: rev.reviewRating?.ratingValue || null,
+              body: (rev.reviewBody || '').substring(0, 300),
+              date: rev.datePublished || null,
+            });
+          }
+        }
+        // Check @graph
+        if (item['@graph']) {
+          for (const node of item['@graph']) {
+            if (node.aggregateRating) {
+              reviews.push({
+                type: 'aggregate',
+                ratingValue: node.aggregateRating.ratingValue,
+                reviewCount: node.aggregateRating.reviewCount,
+                itemName: node.name,
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  });
+
+  // From HTML rating elements
+  $('[class*="rating"], [class*="review"], [itemprop="ratingValue"], [itemprop="reviewBody"]').each((_, el) => {
+    const rating = $(el).attr('content') || $(el).text().trim();
+    if (rating && rating.length < 500) {
+      const ratingNum = parseFloat(rating);
+      if (!isNaN(ratingNum) && ratingNum >= 0 && ratingNum <= 5) {
+        reviews.push({ type: 'html-rating', value: ratingNum, element: el.tagName });
+      }
+    }
+  });
+
+  // Star rating patterns (★★★★☆ or similar)
+  const starText = $('body').text();
+  const starMatch = starText.match(/[★☆]{3,5}/g);
+  if (starMatch) {
+    starMatch.slice(0, 5).forEach(s => {
+      const filled = (s.match(/★/g) || []).length;
+      const total = s.length;
+      reviews.push({ type: 'star-rating', rating: filled, outOf: total });
+    });
+  }
+
+  return reviews.slice(0, 30);
+}
+
+/**
+ * Extract FAQ content
+ */
+function extractFAQs($) {
+  const faqs = [];
+
+  // From JSON-LD FAQPage schema
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item['@type'] === 'FAQPage' && item.mainEntity) {
+          const entities = Array.isArray(item.mainEntity) ? item.mainEntity : [item.mainEntity];
+          for (const entity of entities) {
+            if (entity.name && entity.acceptedAnswer) {
+              faqs.push({
+                question: entity.name,
+                answer: (entity.acceptedAnswer.text || '').substring(0, 500),
+                source: 'json-ld',
+              });
+            }
+          }
+        }
+        if (item['@graph']) {
+          for (const node of item['@graph']) {
+            if (node['@type'] === 'FAQPage' && node.mainEntity) {
+              const entities = Array.isArray(node.mainEntity) ? node.mainEntity : [node.mainEntity];
+              for (const entity of entities) {
+                if (entity.name && entity.acceptedAnswer) {
+                  faqs.push({ question: entity.name, answer: (entity.acceptedAnswer.text || '').substring(0, 500), source: 'json-ld' });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  });
+
+  // From HTML: details/summary elements
+  $('details').each((_, el) => {
+    const question = $(el).find('summary').text().trim();
+    const answer = $(el).text().replace(question, '').trim();
+    if (question && answer && question.length < 500) {
+      faqs.push({ question, answer: answer.substring(0, 500), source: 'details-summary' });
+    }
+  });
+
+  // From FAQ-like sections with common class patterns
+  const faqSelectors = [
+    '[class*="faq"] [class*="question"]', '[class*="faq"] [class*="title"]',
+    '[class*="accordion"] [class*="header"]', '[class*="accordion"] [class*="title"]',
+    '[id*="faq"] h3', '[id*="faq"] h4',
+  ];
+
+  for (const sel of faqSelectors) {
+    try {
+      $(sel).each((_, el) => {
+        const question = $(el).text().trim();
+        const answer = $(el).next().text().trim() || $(el).parent().find('[class*="answer"], [class*="content"], [class*="body"], p').first().text().trim();
+        if (question && question.length > 5 && question.length < 500) {
+          faqs.push({ question, answer: (answer || '').substring(0, 500), source: 'html-faq' });
+        }
+      });
+    } catch {}
+  }
+
+  return faqs.slice(0, 50);
+}
+
+/**
+ * Extract breadcrumb navigation
+ */
+function extractBreadcrumbs($) {
+  const breadcrumbs = [];
+
+  // From JSON-LD BreadcrumbList
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item['@type'] === 'BreadcrumbList' && item.itemListElement) {
+          for (const crumb of item.itemListElement) {
+            breadcrumbs.push({
+              name: crumb.name || crumb.item?.name,
+              url: crumb.item?.['@id'] || crumb.item,
+              position: crumb.position,
+              source: 'json-ld',
+            });
+          }
+        }
+        if (item['@graph']) {
+          for (const node of item['@graph']) {
+            if (node['@type'] === 'BreadcrumbList' && node.itemListElement) {
+              for (const crumb of node.itemListElement) {
+                breadcrumbs.push({
+                  name: crumb.name || crumb.item?.name,
+                  url: crumb.item?.['@id'] || crumb.item,
+                  position: crumb.position,
+                  source: 'json-ld',
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  });
+
+  // From HTML breadcrumb elements
+  const bcSelectors = [
+    '[class*="breadcrumb"]', 'nav[aria-label*="breadcrumb"]',
+    '[itemtype*="BreadcrumbList"]', '.breadcrumbs', '#breadcrumbs',
+  ];
+
+  if (breadcrumbs.length === 0) {
+    for (const sel of bcSelectors) {
+      try {
+        $(sel).find('a, span, li').each((i, el) => {
+          const text = $(el).text().trim();
+          const href = $(el).attr('href') || $(el).find('a').attr('href');
+          if (text && text.length < 100) {
+            breadcrumbs.push({ name: text, url: href || null, position: i + 1, source: 'html' });
+          }
+        });
+        if (breadcrumbs.length > 0) break;
+      } catch {}
+    }
+  }
+
+  return breadcrumbs;
+}
+
+/**
+ * Extract navigation structure
+ */
+function extractNavigationStructure($, baseUrl) {
+  const navItems = [];
+
+  // Find primary nav
+  const navSelectors = [
+    'nav', 'header nav', '[role="navigation"]',
+    '#nav', '#navigation', '.nav', '.navigation', '.navbar',
+    'header .menu', 'header ul',
+  ];
+
+  for (const sel of navSelectors) {
+    try {
+      const $nav = $(sel).first();
+      if ($nav.length === 0) continue;
+
+      $nav.find('a[href]').each((_, el) => {
+        const text = $(el).text().trim();
+        const href = $(el).attr('href');
+        if (!text || !href || text.length > 100) return;
+        if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+
+        let absoluteUrl;
+        try { absoluteUrl = new URL(href, baseUrl.origin).href; } catch { absoluteUrl = href; }
+
+        // Detect if it's a dropdown parent
+        const isDropdown = $(el).parent().find('ul, [class*="dropdown"], [class*="submenu"]').length > 0;
+        const depth = $(el).parents('ul, ol').length - 1;
+
+        navItems.push({
+          text,
+          url: absoluteUrl,
+          depth: Math.max(0, depth),
+          isDropdown,
+        });
+      });
+
+      if (navItems.length > 0) break;
+    } catch {}
+  }
+
+  return {
+    items: navItems.slice(0, 50),
+    totalItems: navItems.length,
+    maxDepth: navItems.length > 0 ? Math.max(...navItems.map(n => n.depth)) : 0,
+  };
+}
+
+/**
+ * Discover OpenAPI/Swagger endpoints
+ */
+function extractOpenAPIs($, html, baseUrl) {
+  const apis = [];
+  const seen = new Set();
+
+  // Common API doc paths
+  const apiDocPatterns = [
+    /["'](\/swagger[^"'\s]{0,100})["']/gi,
+    /["'](\/api-docs[^"'\s]{0,100})["']/gi,
+    /["'](\/openapi[^"'\s]{0,100})["']/gi,
+    /["'](\/docs\/api[^"'\s]{0,100})["']/gi,
+    /["'](\/redoc[^"'\s]{0,50})["']/gi,
+  ];
+
+  for (const pattern of apiDocPatterns) {
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      const path = match[1];
+      if (!seen.has(path)) {
+        seen.add(path);
+        let absoluteUrl;
+        try { absoluteUrl = new URL(path, baseUrl.origin).href; } catch { absoluteUrl = path; }
+        apis.push({ url: absoluteUrl, type: 'discovered' });
+      }
+    }
+  }
+
+  // Links pointing to API docs
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const lower = href.toLowerCase();
+    if (lower.includes('swagger') || lower.includes('api-doc') || lower.includes('openapi') || lower.includes('/redoc')) {
+      if (!seen.has(href)) {
+        seen.add(href);
+        let absoluteUrl;
+        try { absoluteUrl = new URL(href, baseUrl.origin).href; } catch { absoluteUrl = href; }
+        apis.push({ url: absoluteUrl, text: $(el).text().trim(), type: 'link' });
+      }
+    }
+  });
+
+  return apis.slice(0, 20);
+}
+
+/**
+ * Generate page fingerprint for duplicate detection
+ */
+function generatePageFingerprint(html) {
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    contentHash: crypto.createHash('md5').update(stripped).digest('hex'),
+    fullHash: crypto.createHash('md5').update(html).digest('hex'),
+    contentLength: stripped.length,
+    htmlLength: html.length,
+  };
+}
+
+/**
+ * Detect page language
+ */
+function detectLanguage($, html) {
+  const htmlLang = $('html').attr('lang') || $('html').attr('xml:lang');
+  const contentLang = $('meta[http-equiv="content-language"]').attr('content');
+  const ogLocale = $('meta[property="og:locale"]').attr('content');
+
+  // Alternate languages
+  const alternates = [];
+  $('link[rel="alternate"][hreflang]').each((_, el) => {
+    alternates.push({
+      lang: $(el).attr('hreflang'),
+      url: $(el).attr('href'),
+    });
+  });
+
+  // Direction
+  const dir = $('html').attr('dir') || $('body').attr('dir');
+
+  return {
+    primary: htmlLang || contentLang || ogLocale || null,
+    contentLanguage: contentLang || null,
+    ogLocale: ogLocale || null,
+    direction: dir || 'ltr',
+    alternateLanguages: alternates,
+    isMultilingual: alternates.length > 0,
+  };
+}
+
+/**
+ * Extract copyright and legal information
+ */
+function extractCopyright($, html) {
+  const results = {
+    notices: [],
+    year: null,
+    owner: null,
+    license: null,
+    legalLinks: [],
+  };
+
+  // Copyright patterns
+  const copyrightPatterns = [
+    /(?:©|&copy;|copyright)\s*(?:(?:20|19)\d{2})?\s*[-–]?\s*(?:(?:20|19)\d{2})?\s*([^<\n.]{2,100})/gi,
+    /(?:©|copyright)\s*((?:20|19)\d{2})/gi,
+  ];
+
+  // Look in footer first
+  const footerText = $('footer').text() || '';
+  for (const pattern of copyrightPatterns) {
+    const match = pattern.exec(footerText);
+    if (match) {
+      results.notices.push(match[0].trim().substring(0, 200));
+      const yearMatch = match[0].match(/(20|19)\d{2}/g);
+      if (yearMatch) results.year = yearMatch[yearMatch.length - 1];
+      if (match[1] && match[1].trim().length > 2) results.owner = match[1].trim().substring(0, 100);
+    }
+  }
+
+  // Visible legal text
+  const visibleText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ');
+
+  if (results.notices.length === 0) {
+    for (const pattern of copyrightPatterns) {
+      const match = pattern.exec(visibleText);
+      if (match) {
+        results.notices.push(match[0].trim().substring(0, 200));
+        const yearMatch = match[0].match(/(20|19)\d{2}/g);
+        if (yearMatch) results.year = yearMatch[yearMatch.length - 1];
+      }
+    }
+  }
+
+  // Legal page links
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const text = $(el).text().trim().toLowerCase();
+    const lower = href.toLowerCase();
+    const legalTerms = ['privacy', 'terms', 'legal', 'cookie', 'gdpr', 'tos', 'eula', 'disclaimer', 'imprint', 'impressum'];
+    if (legalTerms.some(t => lower.includes(t) || text.includes(t))) {
+      results.legalLinks.push({ text: $(el).text().trim(), url: href });
+    }
+  });
+
+  results.legalLinks = results.legalLinks.slice(0, 10);
+
+  // License from meta
+  const license = $('meta[name="license"]').attr('content') || $('link[rel="license"]').attr('href');
+  if (license) results.license = license;
+
+  return results;
+}
+
+/**
+ * Deep Schema.org extraction from JSON-LD
+ */
+function extractSchemaOrg($) {
+  const schemas = [];
+
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html());
+      const items = Array.isArray(data) ? data : [data];
+
+      for (const item of items) {
+        if (item['@type']) {
+          schemas.push({
+            type: item['@type'],
+            name: item.name || null,
+            description: (item.description || '').substring(0, 300) || null,
+            url: item.url || null,
+            image: item.image?.url || item.image || null,
+            properties: Object.keys(item).filter(k => !k.startsWith('@')),
+          });
+        }
+        // Expand @graph
+        if (item['@graph'] && Array.isArray(item['@graph'])) {
+          for (const node of item['@graph']) {
+            if (node['@type']) {
+              schemas.push({
+                type: node['@type'],
+                name: node.name || null,
+                description: (node.description || '').substring(0, 300) || null,
+                url: node.url || null,
+                properties: Object.keys(node).filter(k => !k.startsWith('@')),
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  });
+
+  return {
+    schemas,
+    types: [...new Set(schemas.map(s => s.type).flat())],
+    count: schemas.length,
+  };
+}
+
+/**
+ * Extract Microdata (itemscope/itemprop)
+ */
+function extractMicrodata($) {
+  const items = [];
+
+  $('[itemscope]').each((_, el) => {
+    const type = $(el).attr('itemtype') || null;
+    const props = {};
+
+    $(el).find('[itemprop]').each((_, prop) => {
+      const name = $(prop).attr('itemprop');
+      const value = $(prop).attr('content') || $(prop).attr('href') || $(prop).attr('src') || $(prop).text().trim();
+      if (name && value) {
+        props[name] = value.substring(0, 300);
+      }
+    });
+
+    if (Object.keys(props).length > 0) {
+      items.push({ type, properties: props });
+    }
+  });
+
+  return items.slice(0, 20);
+}
+
+/**
+ * Extract link relations (rel attributes on link tags)
+ */
+function extractLinkRelations($, baseUrl) {
+  const relations = [];
+  const seen = new Set();
+
+  $('link[rel]').each((_, el) => {
+    const rel = $(el).attr('rel');
+    const href = $(el).attr('href');
+    const type = $(el).attr('type') || null;
+    const title = $(el).attr('title') || null;
+
+    if (!rel) return;
+    const key = `${rel}:${href}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    let absoluteUrl = href;
+    if (href) {
+      try { absoluteUrl = new URL(href, baseUrl.origin).href; } catch {}
+    }
+
+    relations.push({ rel, href: absoluteUrl, type, title });
+  });
+
+  return relations.slice(0, 50);
+}
+
+/**
+ * Analyze response headers for intelligence
+ */
+function analyzeResponseHeaders(headers) {
+  const analysis = {
+    server: headers['server'] || null,
+    poweredBy: headers['x-powered-by'] || null,
+    contentType: headers['content-type'] || null,
+    contentEncoding: headers['content-encoding'] || null,
+    cacheControl: headers['cache-control'] || null,
+    expires: headers['expires'] || null,
+    etag: headers['etag'] ? true : false,
+    lastModified: headers['last-modified'] || null,
+    age: headers['age'] || null,
+    via: headers['via'] || null,
+    altSvc: headers['alt-svc'] || null,
+    xCache: headers['x-cache'] || null,
+    xRequestId: headers['x-request-id'] || headers['x-req-id'] || null,
+    xRuntime: headers['x-runtime'] || headers['x-response-time'] || null,
+    // Compression
+    isCompressed: !!(headers['content-encoding'] && (headers['content-encoding'].includes('gzip') || headers['content-encoding'].includes('br') || headers['content-encoding'].includes('deflate'))),
+    compressionType: headers['content-encoding'] || 'none',
+    // Caching
+    isCached: !!(headers['x-cache'] && headers['x-cache'].toLowerCase().includes('hit')),
+    // HTTP/2 or HTTP/3 hints
+    supportsH2: !!(headers['alt-svc'] && (headers['alt-svc'].includes('h2') || headers['alt-svc'].includes('h3'))),
+    // Custom headers (non-standard, could reveal tech)
+    customHeaders: {},
+  };
+
+  // Collect non-standard headers  
+  const standardHeaders = new Set([
+    'content-type', 'content-length', 'content-encoding', 'cache-control',
+    'date', 'server', 'expires', 'etag', 'last-modified', 'age', 'via',
+    'connection', 'keep-alive', 'transfer-encoding', 'vary', 'accept-ranges',
+  ]);
+
+  for (const [key, val] of Object.entries(headers)) {
+    if (key.startsWith('x-') || key.startsWith('cf-') || (!standardHeaders.has(key) && typeof val === 'string')) {
+      analysis.customHeaders[key] = typeof val === 'string' ? val.substring(0, 200) : val;
+    }
+  }
+
+  return analysis;
 }
