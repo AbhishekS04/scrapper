@@ -446,9 +446,18 @@ export function detectTechStack(html, headers = {}) {
   for (const [category, techs] of Object.entries(SIGNATURES)) {
     if (!result[category]) continue;
     for (const [name, sigs] of Object.entries(techs)) {
-      const found = sigs.some(sig => combined.includes(sig.toLowerCase()));
-      if (found && !result[category].includes(name)) {
-        result[category].push(name);
+      // Special stricter logic for Magento CMS
+      if (category === 'cms' && name === 'Magento') {
+        // Require at least 2 unique Magento signatures to match
+        const matches = sigs.filter(sig => combined.includes(sig.toLowerCase()));
+        if (matches.length >= 2 && !result[category].includes(name)) {
+          result[category].push(name);
+        }
+      } else {
+        const found = sigs.some(sig => combined.includes(sig.toLowerCase()));
+        if (found && !result[category].includes(name)) {
+          result[category].push(name);
+        }
       }
     }
   }
