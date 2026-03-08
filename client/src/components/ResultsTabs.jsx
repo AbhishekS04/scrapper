@@ -291,6 +291,72 @@ function OverviewTab({ job, results, allLinks, allImages, allScripts, allLeaked,
         <span>📊 {results.length} page{results.length !== 1 ? 's' : ''} analyzed</span>
       </div>
 
+      {/* === Security Headers === */}
+      {(() => {
+        const CRITICAL_HEADERS = ['Content-Security-Policy', 'Strict-Transport-Security', 'X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy'];
+        const merged = allSecurity.reduce((acc, sec) => { Object.assign(acc, sec.headers || {}); return acc; }, {});
+        const passCount = CRITICAL_HEADERS.filter(h => Object.keys(merged).some(k => k.toLowerCase() === h.toLowerCase())).length;
+        return (
+          <div className="bg-dark-750/50 border border-white/[0.06] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-200">🛡️ Security Headers</h4>
+              <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${avgSecScore >= 75 ? 'bg-emerald-500/15 text-emerald-400' : avgSecScore >= 50 ? 'bg-amber-500/15 text-amber-400' : 'bg-red-500/15 text-red-400'}`}>
+                {passCount}/{CRITICAL_HEADERS.length} passing
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {CRITICAL_HEADERS.map(h => {
+                const present = Object.keys(merged).some(k => k.toLowerCase() === h.toLowerCase());
+                return (
+                  <div key={h} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono ${present ? 'bg-emerald-500/[0.05] border border-emerald-500/20 text-emerald-300' : 'bg-red-500/[0.05] border border-red-500/15 text-red-300/80'}`}>
+                    <span className={present ? 'text-emerald-400' : 'text-red-500'}>{present ? '✓' : '✗'}</span>
+                    {h}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* === SEO Breakdown === */}
+      {avgSeoScore > 0 && (() => {
+        const seoChecks = results[0]?.seoScore?.checks || results[0]?.seo_score?.checks || {};
+        const seoIssues = [...new Set(results.flatMap(r => r.seoScore?.issues || r.seo_score?.issues || []))];
+        return (
+          <div className="bg-dark-750/50 border border-white/[0.06] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-200">🔍 SEO Breakdown</h4>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${avgSeoScore >= 80 ? 'bg-emerald-500/15 text-emerald-400' : avgSeoScore >= 60 ? 'bg-amber-500/15 text-amber-400' : 'bg-red-500/15 text-red-400'}`}>{avgSeoScore}/100</span>
+                <span className={`text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center ${seoGrade === 'A' ? 'bg-emerald-500/20 text-emerald-400' : seoGrade === 'B' ? 'bg-green-500/20 text-green-400' : seoGrade === 'C' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>{seoGrade}</span>
+              </div>
+            </div>
+            {Object.keys(seoChecks).length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {Object.entries(seoChecks).map(([check, passed]) => (
+                  <div key={check} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs ${passed ? 'bg-emerald-500/[0.05] border border-emerald-500/15 text-emerald-300' : 'bg-red-500/[0.05] border border-red-500/15 text-red-300/80'}`}>
+                    <span className={passed ? 'text-emerald-400' : 'text-red-500'}>{passed ? '✓' : '✗'}</span>
+                    <span className="capitalize">{check.replace(/_/g, ' ')}</span>
+                  </div>
+                ))}
+              </div>
+            ) : seoIssues.length > 0 ? (
+              <ul className="space-y-1">
+                {seoIssues.slice(0, 8).map((issue, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-amber-300/80">
+                    <span className="text-amber-500 flex-shrink-0 mt-0.5">⚠</span> {issue}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-emerald-400/80">SEO checks passed. See the SEO &amp; Schema tab for full details.</p>
+            )}
+          </div>
+        );
+      })()}
+
+
       {/* Suggestions summary */}
       {suggestions.length > 0 && (
         <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
@@ -522,47 +588,49 @@ function LinksTab({ links }) {
 
 /* ─── Images Tab ─────────────────────────────────────────────── */
 function ImagesTab({ images }) {
+  const [viewMode, setViewMode] = useState('data');
   const [failed, setFailed] = useState(new Set());
-  const displayImages = images.filter(img => img?.src && !failed.has(img.src));
-  
+  const noAlt = images.filter(img => !img?.alt);
+
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <p className="text-sm text-gray-400">
-          <span className="text-white font-semibold text-base">{images.length}</span>
-          {' '}images found across all pages
+          <span className="text-white font-semibold text-base">{images.length}</span>{' '}images found
+          {noAlt.length > 0 && <span className="ml-2 text-amber-400/80">— {noAlt.length} missing alt text</span>}
         </p>
-        {images.length !== displayImages.length && (
-          <span className="text-xs text-amber-400/70 bg-amber-400/10 px-2 py-0.5 rounded">
-            {images.length - displayImages.length} failed to load
-          </span>
-        )}
+        <div className="flex gap-1 bg-white/[0.04] rounded-lg p-0.5">
+          <button onClick={() => setViewMode('data')} className={`text-xs px-3 py-1 rounded-md transition-all ${viewMode === 'data' ? 'bg-white/[0.12] text-white' : 'text-gray-400 hover:text-white'}`}>Data</button>
+          <button onClick={() => setViewMode('grid')} className={`text-xs px-3 py-1 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white/[0.12] text-white' : 'text-gray-400 hover:text-white'}`}>Grid</button>
+        </div>
       </div>
       {images.length === 0 ? (
         <div className="text-center py-8 text-gray-500 text-sm">No images found</div>
+      ) : viewMode === 'data' ? (
+        <div className="space-y-1">
+          <div className="grid grid-cols-[1.5rem_1fr_1fr] gap-3 px-3 py-1.5 text-[10px] uppercase tracking-widest text-gray-600 font-semibold border-b border-white/[0.05]">
+            <span>#</span><span>Alt Text</span><span>URL</span>
+          </div>
+          {images.map((img, i) => (
+            <div key={i} className={`grid grid-cols-[1.5rem_1fr_1fr] gap-3 px-3 py-2 rounded-lg border text-xs ${!img?.alt ? 'bg-amber-500/[0.03] border-amber-500/10' : 'bg-white/[0.015] border-white/[0.04]'}`}>
+              <span className="text-gray-600 font-mono">{i + 1}</span>
+              <span className={img?.alt ? 'text-gray-200 truncate' : 'text-amber-400/60 italic'}>{img?.alt || 'no alt text'}</span>
+              <a href={img?.src} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-cyan-400 truncate font-mono transition-colors">{img?.src}</a>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {images.map((img, i) => (
             <div key={i} className="bg-dark-750 rounded-lg border border-dark-600/30 overflow-hidden group">
               <div className="aspect-video bg-dark-700 flex items-center justify-center overflow-hidden">
-                <img
-                  src={img.src}
-                  alt={img.alt || ''}
-                  referrerPolicy="no-referrer"
-                  crossOrigin="anonymous"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                  onError={(e) => {
-                    setFailed(prev => new Set([...prev, img.src]));
-                    e.target.parentElement.innerHTML = `<div class="w-full h-full flex flex-col items-center justify-center gap-1 p-2"><div class="text-gray-600 text-2xl">🖼️</div><div class="text-gray-600 text-[10px] text-center font-mono break-all">${img.src?.split('/').slice(-1)[0] || '...'}</div></div>`;
-                  }}
-                />
+                <img src={img.src} alt={img.alt || ''} referrerPolicy="no-referrer" crossOrigin="anonymous"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy"
+                  onError={(e) => { setFailed(prev => new Set([...prev, img.src])); e.target.parentElement.innerHTML = `<div class="w-full h-full flex flex-col items-center justify-center gap-1 p-2"><div class="text-gray-600 text-2xl">🖼️</div><div class="text-gray-600 text-[10px] font-mono break-all">${img.src?.split('/').slice(-1)[0] || '...'}</div></div>`; }} />
               </div>
               <div className="p-2">
-                <p className="text-xs text-gray-300 truncate font-medium" title={img.alt}>{img.alt || 'No alt text'}</p>
-                <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-600 hover:text-cyan-400 truncate block mt-1 transition-colors">
-                  {img.src}
-                </a>
+                <p className="text-xs text-gray-300 truncate">{img.alt || <em className="text-amber-400/60">No alt</em>}</p>
+                <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-600 hover:text-cyan-400 truncate block mt-0.5 transition-colors">{img.src}</a>
               </div>
             </div>
           ))}
@@ -572,86 +640,79 @@ function ImagesTab({ images }) {
   );
 }
 
+
 /* ─── Text Content Tab ───────────────────────────────────────── */
 function TextTab({ results }) {
   const [expandedPage, setExpandedPage] = useState(0);
   const result = results[expandedPage];
+  const allHeadings = Object.entries(result?.headings || {}).flatMap(([level, arr]) => arr.map(text => ({ level, text })));
+  const paragraphs = result?.paragraphs || [];
 
   return (
     <div className="space-y-4">
       {results.length > 1 && (
-        <select
-          value={expandedPage}
-          onChange={(e) => setExpandedPage(parseInt(e.target.value))}
-          className="input-field text-xs max-w-md"
-        >
+        <select value={expandedPage} onChange={(e) => setExpandedPage(parseInt(e.target.value))} className="input-field text-xs max-w-full">
           {results.map((r, i) => (
-            <option key={i} value={i} className="bg-dark-800">{r.pageUrl}</option>
+            <option key={i} value={i} className="bg-dark-800">{r.pageUrl || `Page ${i + 1}`}</option>
           ))}
         </select>
       )}
 
       {result && (
         <div className="space-y-6">
-          {/* Headings */}
-          <div>
-            <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Headings</h4>
-            <div className="space-y-2">
-              {Object.entries(result.headings || {}).map(([level, headings]) =>
-                headings.map((h, i) => (
-                  <div key={`${level}-${i}`} className="flex items-start gap-3">
-                    <span className="text-[10px] font-mono text-white bg-white/[0.1] px-1.5 py-0.5 rounded uppercase flex-shrink-0">
-                      {level}
+          {/* Stats row */}
+          <div className="flex gap-6 py-2 border-b border-white/[0.06] text-xs flex-wrap">
+            <div><span className="text-gray-500">Words: </span><span className="text-white font-mono">{(result.wordCount || 0).toLocaleString()}</span></div>
+            <div><span className="text-gray-500">Paragraphs: </span><span className="text-white font-mono">{paragraphs.length}</span></div>
+            <div><span className="text-gray-500">Headings: </span><span className="text-white font-mono">{allHeadings.length}</span></div>
+            <div><span className="text-gray-500">Reading time: </span><span className="text-white font-mono">{Math.max(1, Math.round((result.wordCount || 0) / 200))} min</span></div>
+          </div>
+
+          {/* Heading structure */}
+          {allHeadings.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-3">Page Structure</h4>
+              <div className="space-y-1.5">
+                {allHeadings.map((h, i) => (
+                  <div key={i} className="flex items-baseline gap-3">
+                    <span className="text-[9px] font-mono text-gray-600 w-5 flex-shrink-0 text-right">{h.level}</span>
+                    <span className={
+                      h.level === 'h1' ? 'text-base font-bold text-white' :
+                      h.level === 'h2' ? 'text-sm font-semibold text-gray-100' :
+                      h.level === 'h3' ? 'text-sm font-medium text-gray-200' :
+                      'text-xs text-gray-400'
+                    }>
+                      {h.text}
                     </span>
-                    <span className="text-gray-300 text-sm">{h}</span>
                   </div>
-                ))
-              )}
-              {Object.values(result.headings || {}).flat().length === 0 && (
-                <div className="text-gray-500 text-sm">No headings found</div>
-              )}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Paragraphs */}
-          <div>
-            <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
-              Paragraphs ({(result.paragraphs || []).length})
-            </h4>
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {(result.paragraphs || []).slice(0, 50).map((p, i) => (
-                <p key={i} className="text-gray-400 text-sm leading-relaxed border-l-2 border-dark-600 pl-3">
-                  {p}
-                </p>
-              ))}
-              {(result.paragraphs || []).length === 0 && (
-                <div className="text-gray-500 text-sm">No paragraphs found</div>
-              )}
+          {/* Full page text */}
+          {paragraphs.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-3">All Text Content — {paragraphs.length} paragraphs</h4>
+              <div className="space-y-2.5 max-h-[65vh] overflow-y-auto custom-scrollbar pr-2">
+                {paragraphs.map((p, i) => (
+                  <p key={i} className="text-sm text-gray-300 leading-relaxed border-l border-white/[0.06] pl-3 py-0.5">
+                    {p}
+                  </p>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Word count */}
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 text-xs sm:text-sm">
-            <div>
-              <span className="text-gray-500">Word Count: </span>
-              <span className="text-white font-mono">{result.wordCount?.toLocaleString() || 0}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Characters: </span>
-              <span className="text-white font-mono">
-                {(result.paragraphs || []).join(' ').length.toLocaleString()}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Reading Time: </span>
-              <span className="text-white font-mono">{Math.max(1, Math.round((result.wordCount || 0) / 200))} min</span>
-            </div>
-          </div>
+          {allHeadings.length === 0 && paragraphs.length === 0 && (
+            <div className="text-center py-10 text-gray-500 text-sm">No text content found on this page</div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
 
 /* ─── Tables Tab ──────────────────────────────────────────────── */
 function TablesTab({ results }) {
