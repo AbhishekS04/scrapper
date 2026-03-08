@@ -882,13 +882,66 @@ function extractLeakedData($, html) {
       'stylesheet', 'text/css', 'placeholder', 'example',
       'test', 'sample', 'demo', 'dummy', 'fake', 'xxx',
       'lorem', 'your-', 'your_', '<option', 'id="', "id='",
-      'class="', "class='", 'data-', 'aria-',
+      'class="', "class='",
       // Additional false-positive context markers
       'tutorial', 'readme', 'documentation', 'docs',
       'snippet', 'code-block', 'highlight', 'syntax',
       '<code', '</code', '<pre', '</pre',
     ];
     return falseContexts.some(ctx => context.includes(ctx));
+  };
+
+  // ─── Helper: get source location info from match position ──────
+  const getSourceInfo = (html, pos, matchVal) => {
+    // Get 120 chars of surrounding context
+    const ctxStart = Math.max(0, pos - 120);
+    const ctxEnd = Math.min(html.length, pos + matchVal.length + 120);
+    const snippet = html.substring(ctxStart, ctxEnd).replace(/\s+/g, ' ').trim();
+
+    // Determine source type by looking at what's before the match
+    const before = html.substring(Math.max(0, pos - 2000), pos).toLowerCase();
+
+    // Check if inside a <script src="..."> tag (external script)
+    const lastScriptOpen = before.lastIndexOf('<script');
+    const lastScriptClose = before.lastIndexOf('</script');
+    const isInScript = lastScriptOpen > lastScriptClose;
+
+    // Try to find the src of the enclosing script tag
+    let scriptSrc = null;
+    if (isInScript) {
+      const scriptTag = html.substring(html.lastIndexOf('<script', pos), html.indexOf('>', html.lastIndexOf('<script', pos)) + 1);
+      const srcMatch = scriptTag.match(/src=["']([^"']+)["']/i);
+      if (srcMatch) scriptSrc = srcMatch[1];
+    }
+
+    // Detect if inside an HTML attribute
+    const attrMatch = html.substring(Math.max(0, pos - 200), pos).match(/\s([\w-]+)=["'][^"']*$/);
+    const attrName = attrMatch ? attrMatch[1] : null;
+
+    // Count which script block number (for inline scripts)
+    let scriptIndex = null;
+    if (isInScript && !scriptSrc) {
+      const scriptsBefore = (html.substring(0, pos).match(/<script/gi) || []).length;
+      scriptIndex = scriptsBefore;
+    }
+
+    let source = 'HTML';
+    let location = '';
+    if (scriptSrc) {
+      source = 'External Script';
+      location = scriptSrc;
+    } else if (isInScript) {
+      source = 'Inline Script';
+      location = `Inline <script> #${scriptIndex}`;
+    } else if (attrName) {
+      source = 'HTML Attribute';
+      location = `attribute: ${attrName}`;
+    } else {
+      source = 'Page HTML';
+      location = 'Page body/HTML';
+    }
+
+    return { source, location, snippet };
   };
 
   // ─── API Keys & Secrets (HIGH CONFIDENCE only) ──────
@@ -914,6 +967,9 @@ function extractLeakedData($, html) {
     { name: 'Discord Bot Token', re: /[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27}/g, confidence: 'medium' },
   ];
 
+  // Track seen values to avoid showing same key many times
+  const seenApiKeys = new Set();
+
   for (const pat of apiKeyPatterns) {
     let match;
     const re = new RegExp(pat.re.source, pat.re.flags);
@@ -924,27 +980,42 @@ function extractLeakedData($, html) {
       if (isCodeHostingSite) continue;
       // Validate it's not in a false-positive context
       if (!isLikelyFalsePositive(match[0], fullText, match.index)) {
+        // Deduplicate: skip if we've already seen this exact key value
+        if (seenApiKeys.has(match[0])) continue;
+        seenApiKeys.add(match[0]);
+
+        const srcInfo = getSourceInfo(fullText, match.index, match[0]);
         leaked.apiKeys.push({
           type: pat.name,
-          value: match[0].substring(0, 12) + '...' + match[0].substring(match[0].length - 4),
+          value: match[0],
           confidence: pat.confidence,
+          source: srcInfo.source,
+          location: srcInfo.location,
+          snippet: srcInfo.snippet,
         });
       }
     }
   }
 
   // ─── AWS Keys (very specific prefixes) ──────
-  const awsAccessKey = fullText.match(/(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])/g);
-  if (awsAccessKey) {
-    awsAccessKey.forEach(k => {
-      leaked.awsKeys.push({ type: 'AWS Access Key ID', value: k.substring(0, 8) + '...' + k.substring(16), confidence: 'high' });
-    });
+  const seenAwsKeys = new Set();
+  const awsAccessKeyRe = /(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])/g;
+  let awsM2;
+  while ((awsM2 = awsAccessKeyRe.exec(fullText)) !== null) {
+    const k = awsM2[0];
+    if (seenAwsKeys.has(k)) continue;
+    seenAwsKeys.add(k);
+    const srcInfo = getSourceInfo(fullText, awsM2.index, k);
+    leaked.awsKeys.push({ type: 'AWS Access Key ID', value: k, confidence: 'high', source: srcInfo.source, location: srcInfo.location, snippet: srcInfo.snippet });
   }
 
   const awsSecretRe = /(?:aws_secret_access_key|aws_secret)\s*[:=]\s*['"]([A-Za-z0-9\/+=]{40})['"]/gi;
   let awsM;
   while ((awsM = awsSecretRe.exec(fullText)) !== null) {
-    leaked.awsKeys.push({ type: 'AWS Secret Access Key', value: awsM[1].substring(0, 8) + '...', confidence: 'high' });
+    if (seenAwsKeys.has(awsM[1])) continue;
+    seenAwsKeys.add(awsM[1]);
+    const srcInfo = getSourceInfo(fullText, awsM.index, awsM[0]);
+    leaked.awsKeys.push({ type: 'AWS Secret Access Key', value: awsM[1], confidence: 'high', source: srcInfo.source, location: srcInfo.location, snippet: srcInfo.snippet });
   }
 
   // ─── JWT Tokens (must have valid base64url segments) ──────
@@ -974,7 +1045,7 @@ function extractLeakedData($, html) {
         const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
         if (header.alg || header.typ) {
           leaked.jwtTokens.push({
-            value: token.substring(0, 20) + '...',
+            value: token,
             header: header,
             confidence: 'medium',
           });
@@ -1005,7 +1076,7 @@ function extractLeakedData($, html) {
     }
     if (!isLikelyFalsePositive(passM[0], fullText, passM.index)) {
       leaked.passwords.push({
-        value: passM[0].substring(0, 40) + (passM[0].length > 40 ? '...' : ''),
+        value: passM[0],
         confidence: 'medium',
       });
     }
@@ -1041,7 +1112,7 @@ function extractLeakedData($, html) {
     });
 
     leaked.databaseUrls = filtered.map(u => ({
-      value: u.substring(0, 30) + '...',
+      value: u,
       protocol: u.split('://')[0],
       confidence: 'high',
     }));

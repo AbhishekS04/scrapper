@@ -92,6 +92,50 @@ async function processPool(items, fn, concurrency = 3) {
 }
 
 /**
+ * Extract routes from Next.js / Nuxt / SvelteKit __NEXT_DATA__ and route manifests
+ * Strictly avoids false positives — only uses explicit route patterns
+ */
+function extractFrameworkRoutes(html, baseUrl) {
+  const routes = new Set();
+  const origin = new URL(baseUrl).origin;
+  const hostname = new URL(baseUrl).hostname;
+
+  // 1. Extract from __NEXT_DATA__ (Next.js SSR data blob)
+  try {
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/i);
+    if (nextDataMatch) {
+      const nextData = JSON.parse(nextDataMatch[1]);
+      if (nextData.page && nextData.page.startsWith('/')) routes.add(nextData.page);
+    }
+  } catch {}
+
+  // 2. Only extract from explicit <a href="/..."> anchor tags (real navigation links)
+  const anchorPattern = /<a[^>]+href=["'](\/[^"'?#][^"']*)['"]/g;
+  let m;
+  while ((m = anchorPattern.exec(html)) !== null) {
+    const path = m[1];
+    // Must be at least /xx (3 chars), no asset extensions, no internal Next.js paths
+    if (path.length < 3) continue;
+    if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json|xml|map|pdf|zip)/.test(path)) continue;
+    if (path.startsWith('/_next') || path.startsWith('/api/') || path.startsWith('/static/') || path.startsWith('/public/')) continue;
+    // Must look like a clean page route: only letters, numbers, hyphens, underscores, slashes
+    if (!/^\/[a-zA-Z0-9][a-zA-Z0-9\-_\/]*$/.test(path)) continue;
+    routes.add(path);
+  }
+
+  // Convert paths to full URLs on same domain
+  const urls = [];
+  for (const route of routes) {
+    try {
+      const full = new URL(route.startsWith('/') ? origin + route : route);
+      if (full.hostname === hostname) urls.push(full.href);
+    } catch {}
+  }
+
+  return urls;
+}
+
+/**
  * Check if a page needs JS rendering by examining initial HTML
  */
 function needsJSRendering(html) {
@@ -350,38 +394,87 @@ export async function startScrapeJob(jobId, url, options = {}) {
     });
 
     const baseUrl = new URL(url);
+    // Helper: match www/non-www as same domain (e.g. abhisheksingh.tech == www.abhisheksingh.tech)
+    const isSameDomain = (testUrl) => {
+      try {
+        const h1 = new URL(testUrl).hostname.replace(/^www\./, '');
+        const h2 = baseUrl.hostname.replace(/^www\./, '');
+        return h1 === h2;
+      } catch { return false; }
+    };
+    // Normalise a URL to match the base URL's www preference
+    const normaliseToBase = (testUrl) => {
+      try {
+        const u = new URL(testUrl);
+        u.hostname = baseUrl.hostname; // Use same www preference as the user typed
+        return u.href;
+      } catch { return testUrl; }
+    };
 
-    // ─── ELITE: Gather site intelligence first ───
+    // ─── ALWAYS: Auto-discover pages from sitemap (regardless of mode) ───
+    sendProgress(jobId, {
+      type: 'intel',
+      message: 'Fetching sitemap and robots.txt for URL discovery...',
+    });
+    try {
+      const { parseSitemap } = await import('./siteIntel.js');
+      const sitemapResult = await parseSitemap(url);
+      const sitemapPageUrls = (sitemapResult?.pages || [])
+        .map(p => (typeof p === 'string' ? p : p.url))
+        .filter(u => isSameDomain(u))
+        .map(u => normaliseToBase(u)) // rewrite to match www preference
+        .slice(0, maxPages);
+
+      let added = 0;
+      for (const sitemapUrl of sitemapPageUrls) {
+        const norm = sitemapUrl.replace(/\/$/, '');
+        if (!visited.has(norm)) {
+          queue.push({ url: sitemapUrl, currentDepth: 1 });
+          added++;
+        }
+      }
+      if (added > 0) {
+        sendProgress(jobId, {
+          type: 'intel',
+          message: `Sitemap: found ${sitemapPageUrls.length} URLs, added ${added} new pages to queue`,
+        });
+      } else {
+        sendProgress(jobId, {
+          type: 'intel',
+          message: `Sitemap returned ${sitemapPageUrls.length} URLs (all already queued or none found)`,
+        });
+      }
+    } catch (sitemapErr) {
+      sendProgress(jobId, { type: 'intel', message: `Sitemap fetch skipped: ${sitemapErr.message?.substring(0, 80)}` });
+    }
+
+    // ─── ELITE: Gather full site intelligence (deepScan/followLinks only) ───
     if (runSiteIntel && (deepScan || followLinks)) {
       sendProgress(jobId, {
         type: 'intel',
-        message: 'Gathering site intelligence (DNS, SSL, sitemap, robots.txt)...',
+        message: 'Gathering full site intelligence (DNS, SSL, security)...',
       });
       try {
         siteIntelData = await gatherSiteIntelligence(url);
 
-        // Add sitemap URLs to crawl queue
-        if (siteIntelData?.sitemap?.urls && Array.isArray(siteIntelData.sitemap.urls)) {
-          const sitemapUrls = siteIntelData.sitemap.urls
-            .filter(u => {
-              try { return new URL(u).hostname === baseUrl.hostname; } catch { return false; }
-            })
-            .slice(0, maxPages);
-
-          for (const sitemapUrl of sitemapUrls) {
-            const norm = sitemapUrl.replace(/\/$/, '');
-            if (!visited.has(norm)) {
-              queue.push({ url: sitemapUrl, currentDepth: 1 });
+        // Add any additional sitemap URLs not already queued
+        const intelSitemapPages = siteIntelData?.sitemap?.pages || [];
+        for (const page of intelSitemapPages) {
+          const pageUrl = typeof page === 'string' ? page : page.url;
+          if (!pageUrl) continue;
+          try {
+            const norm = new URL(pageUrl).href.replace(/\/$/, '');
+            const normFixed = normaliseToBase(pageUrl);
+            if (isSameDomain(pageUrl) && !visited.has(normFixed.replace(/\/$/, ''))) {
+              queue.push({ url: normFixed, currentDepth: 1 });
             }
-          }
-
-          sendProgress(jobId, {
-            type: 'intel',
-            message: `Site intel complete: found ${sitemapUrls.length} URLs from sitemap, ` +
-                     `DNS records: ${siteIntelData?.dns?.records?.length || 0}, ` +
-                     `SSL: ${siteIntelData?.ssl?.issuer || 'N/A'}`,
-          });
+          } catch {}
         }
+
+        sendProgress(jobId, {
+          type: 'intel',
+          message: `Site intel complete: DNS records: ${siteIntelData?.dns?.a?.length || 0} A records, SSL: ${siteIntelData?.ssl?.issuer?.CN || 'N/A'}`,
+        });
       } catch (error) {
         sendProgress(jobId, {
           type: 'intel',
@@ -404,12 +497,8 @@ export async function startScrapeJob(jobId, url, options = {}) {
       if (visited.has(normalizedUrl)) continue;
       visited.add(normalizedUrl);
 
-      // Only follow links on same domain
-      try {
-        if (new URL(normalizedUrl).hostname !== baseUrl.hostname) continue;
-      } catch {
-        continue;
-      }
+      // Only follow links on same domain (www/non-www normalised)
+      if (!isSameDomain(normalizedUrl)) continue;
 
       // Skip non-HTML resources
       const skipExtensions = ['.pdf', '.zip', '.doc', '.docx', '.xls', '.xlsx', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.mp4', '.mp3', '.avi', '.mov', '.css', '.js', '.xml', '.rss'];
@@ -616,7 +705,8 @@ export async function startScrapeJob(jobId, url, options = {}) {
         });
 
         // Add internal links to queue if following links and within depth
-        if ((followLinks || deepScan) && currentDepth < depth) {
+        if ((followLinks || deepScan || brutalMode) && currentDepth < depth) {
+          // 1. Regular <a href> links from the page
           for (const link of pageData.linksInternal) {
             try {
               const linkNorm = new URL(link.url).href.replace(/\/$/, '');
@@ -626,6 +716,17 @@ export async function startScrapeJob(jobId, url, options = {}) {
             } catch {
               // Skip invalid URLs
             }
+          }
+
+          // 2. Framework routes from __NEXT_DATA__, hrefs in JS, etc.
+          const frameworkRoutes = extractFrameworkRoutes(result.html, normalizedUrl);
+          for (const routeUrl of frameworkRoutes) {
+            try {
+              const normRoute = new URL(routeUrl).href.replace(/\/$/, '');
+              if (!visited.has(normRoute)) {
+                queue.push({ url: routeUrl, currentDepth: currentDepth + 1 });
+              }
+            } catch {}
           }
         }
 

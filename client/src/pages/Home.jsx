@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import URLInput from '../components/URLInput.jsx';
 import ProgressPanel from '../components/ProgressPanel.jsx';
 import ResultsTabs from '../components/ResultsTabs.jsx';
@@ -11,6 +12,7 @@ export default function Home() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
+
       {/* Hero Section */}
       {showHero && (
         <div className="relative flex flex-col items-center justify-center pt-12 sm:pt-24 pb-8 sm:pb-14 px-4 sm:px-6 animate-fade-in">

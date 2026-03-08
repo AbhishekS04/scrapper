@@ -9,6 +9,7 @@ import {
 } from '@clerk/clerk-react';
 import Home from './pages/Home.jsx';
 import History from './pages/History.jsx';
+import Info from './pages/Info.jsx';
 
 function NavBar() {
   const location = useLocation();
@@ -50,6 +51,16 @@ function NavBar() {
               }`}
             >
               History
+            </Link>
+            <Link 
+              to="/info"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                location.pathname === '/info'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              Info
             </Link>
           </SignedIn>
         </div>
@@ -117,6 +128,17 @@ function NavBar() {
             >
               History
             </Link>
+            <Link
+              to="/info"
+              onClick={() => setMobileOpen(false)}
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left ${
+                location.pathname === '/info'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              Info
+            </Link>
           </div>
         </div>
       </SignedIn>
@@ -134,6 +156,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/history" element={<History />} />
+              <Route path="/info" element={<Info />} />
             </Routes>
           </SignedIn>
           <SignedOut>

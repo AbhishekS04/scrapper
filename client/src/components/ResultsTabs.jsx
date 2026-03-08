@@ -3,6 +3,7 @@ import { useState } from 'react';
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '◆' },
   { id: 'suggestions', label: 'Suggestions', icon: '💡' },
+  { id: 'design', label: 'UI Data', icon: '🎨' },
   { id: 'links', label: 'Links', icon: '🔗' },
   { id: 'images', label: 'Images', icon: '🖼️' },
   { id: 'text', label: 'Text', icon: '📝' },
@@ -14,7 +15,6 @@ const TABS = [
   { id: 'metadata', label: 'Metadata', icon: '🏷️' },
   { id: 'tech', label: 'Tech Stack', icon: '⚙️' },
   { id: 'seo', label: 'SEO & Schema', icon: '🔍' },
-  { id: 'design', label: 'Design Intel', icon: '🎨' },
   { id: 'content', label: 'Content', icon: '📰' },
   { id: 'intel', label: 'Site Intel', icon: '🌐' },
   { id: 'recon', label: 'Recon', icon: '🔥' },
@@ -37,7 +37,15 @@ export default function ResultsTabs({ jobData }) {
     internal: results.flatMap(r => r.linksInternal || r.links_internal || []),
     external: results.flatMap(r => r.linksExternal || r.links_external || []),
   };
-  const allImages = results.flatMap(r => r.images || []);
+  // Deduplicate images across all pages by src URL
+  const allImages = (() => {
+    const seen = new Set();
+    return results.flatMap(r => Array.isArray(r.images) ? r.images : []).filter(img => {
+      if (!img?.src || seen.has(img.src)) return false;
+      seen.add(img.src);
+      return true;
+    });
+  })();
   const allEmails = [...new Set(results.flatMap(r => r.emails || []))];
   const allPhones = [...new Set(results.flatMap(r => r.phones || []))];
   const allSocial = (() => {
@@ -134,7 +142,7 @@ export default function ResultsTabs({ jobData }) {
       case 'metadata': return <MetadataTab results={results} />;
       case 'tech': return <TechTab results={results} />;
       case 'seo': return <SEOSchemaTab results={results} schemaOrg={allSchemaOrg} microdata={allMicrodata} breadcrumbs={allBreadcrumbs} linkRelations={allLinkRelations} languageInfo={allLanguageInfo} />;
-      case 'design': return <DesignIntelTab colorPalette={allColorPalette} fontInfo={allFontInfo} />;
+      case 'design': return <UIDataTab results={results} />;
       case 'content': return <ContentTab pricing={allPricing} reviews={allReviews} faqs={allFaqs} rssFeeds={allRssFeeds} copyright={allCopyright} />;
       case 'intel': return <SiteIntelTab siteIntel={siteIntel} apiEndpoints={allApiEndpoints} openAPIs={allOpenAPIs} responseHeaders={allResponseHeaders} fingerprints={allFingerprint} />;
       case 'recon': return <ReconTab data={brutalRecon} />;
@@ -514,30 +522,45 @@ function LinksTab({ links }) {
 
 /* ─── Images Tab ─────────────────────────────────────────────── */
 function ImagesTab({ images }) {
+  const [failed, setFailed] = useState(new Set());
+  const displayImages = images.filter(img => img?.src && !failed.has(img.src));
+  
   return (
     <div>
-      <p className="text-sm text-gray-400 mb-4">{images.length} images found</p>
+      <div className="flex items-center gap-3 mb-4">
+        <p className="text-sm text-gray-400">
+          <span className="text-white font-semibold text-base">{images.length}</span>
+          {' '}images found across all pages
+        </p>
+        {images.length !== displayImages.length && (
+          <span className="text-xs text-amber-400/70 bg-amber-400/10 px-2 py-0.5 rounded">
+            {images.length - displayImages.length} failed to load
+          </span>
+        )}
+      </div>
       {images.length === 0 ? (
         <div className="text-center py-8 text-gray-500 text-sm">No images found</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {images.slice(0, 60).map((img, i) => (
+          {images.map((img, i) => (
             <div key={i} className="bg-dark-750 rounded-lg border border-dark-600/30 overflow-hidden group">
               <div className="aspect-video bg-dark-700 flex items-center justify-center overflow-hidden">
                 <img
                   src={img.src}
                   alt={img.alt || ''}
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
                   onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.parentElement.innerHTML = '<div class="text-gray-600 text-xs p-4 text-center">Failed to load</div>';
+                    setFailed(prev => new Set([...prev, img.src]));
+                    e.target.parentElement.innerHTML = `<div class="w-full h-full flex flex-col items-center justify-center gap-1 p-2"><div class="text-gray-600 text-2xl">🖼️</div><div class="text-gray-600 text-[10px] text-center font-mono break-all">${img.src?.split('/').slice(-1)[0] || '...'}</div></div>`;
                   }}
                 />
               </div>
               <div className="p-2">
-                <p className="text-xs text-gray-400 truncate font-mono">{img.alt || 'No alt text'}</p>
-                <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-600 hover:text-gray-300 truncate block mt-1">
+                <p className="text-xs text-gray-300 truncate font-medium" title={img.alt}>{img.alt || 'No alt text'}</p>
+                <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-600 hover:text-cyan-400 truncate block mt-1 transition-colors">
                   {img.src}
                 </a>
               </div>
@@ -1128,39 +1151,131 @@ function SecurityTab({ security }) {
 
 /* ─── Leaked Data Tab ────────────────────────────────────────── */
 function LeaksTab({ leaked }) {
+  const [copied, setCopied] = useState(null);
+
+  // Deduplicate object-based leak arrays by their `value` field across all pages
+  const dedupByValue = (arr) => {
+    const seen = new Set();
+    return arr.filter(item => {
+      const key = typeof item === 'string' ? item : (item.value || JSON.stringify(item));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const agg = {
-    apiKeys: leaked.flatMap(l => l.apiKeys || []),
-    awsKeys: leaked.flatMap(l => l.awsKeys || []),
-    jwtTokens: leaked.flatMap(l => l.jwtTokens || []),
-    passwords: leaked.flatMap(l => l.passwords || []),
+    apiKeys: dedupByValue(leaked.flatMap(l => l.apiKeys || [])),
+    awsKeys: dedupByValue(leaked.flatMap(l => l.awsKeys || [])),
+    jwtTokens: dedupByValue(leaked.flatMap(l => l.jwtTokens || [])),
+    passwords: dedupByValue(leaked.flatMap(l => l.passwords || [])),
     privateIPs: [...new Set(leaked.flatMap(l => l.privateIPs || []))],
-    databaseUrls: leaked.flatMap(l => l.databaseUrls || []),
-    s3Buckets: leaked.flatMap(l => l.s3Buckets || []),
+    databaseUrls: dedupByValue(leaked.flatMap(l => l.databaseUrls || [])),
+    s3Buckets: dedupByValue(leaked.flatMap(l => l.s3Buckets || [])),
     envVars: [...new Set(leaked.flatMap(l => l.envVars || []))],
-    sensitiveComments: leaked.flatMap(l => l.sensitiveComments || []),
+    sensitiveComments: dedupByValue(leaked.flatMap(l => l.sensitiveComments || [])),
     exposedPaths: [...new Set(leaked.flatMap(l => l.exposedPaths || []))],
   };
 
   const totalFindings = Object.values(agg).reduce((sum, arr) => sum + arr.length, 0);
   const severity = totalFindings === 0 ? 'clean' : totalFindings < 3 ? 'low' : totalFindings < 8 ? 'medium' : 'high';
 
-  const LeakSection = ({ title, icon, items, color = 'red' }) => {
+  const copyValue = (val, id) => {
+    navigator.clipboard.writeText(val).then(() => {
+      setCopied(id);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
+  const LeakItem = ({ item, index, sectionId }) => {
+    const val = typeof item === 'string' ? item : item.value || item.full || JSON.stringify(item);
+    const type = typeof item === 'object' ? item.type : null;
+    const confidence = typeof item === 'object' ? item.confidence : null;
+    const protocol = typeof item === 'object' ? item.protocol : null;
+    const header = typeof item === 'object' ? item.header : null;
+    const source = typeof item === 'object' ? item.source : null;
+    const location = typeof item === 'object' ? item.location : null;
+    const snippet = typeof item === 'object' ? item.snippet : null;
+    const id = `${sectionId}-${index}`;
+
+    const sourceColor = source === 'External Script' ? 'bg-orange-500/15 text-orange-300 border-orange-500/25' :
+                        source === 'Inline Script'   ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25' :
+                        source === 'HTML Attribute'  ? 'bg-blue-500/15 text-blue-300 border-blue-500/25' :
+                                                       'bg-gray-500/15 text-gray-400 border-gray-500/25';
+    const sourceIcon = source === 'External Script' ? '📄' :
+                       source === 'Inline Script'   ? '📝' :
+                       source === 'HTML Attribute'  ? '🏷️' : '🌐';
+
+    return (
+      <div className="bg-dark-900/70 rounded-xl border border-red-500/10 hover:border-red-500/20 transition-colors overflow-hidden">
+        {/* Header row: type, confidence, source */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-white/[0.04] flex-wrap gap-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {type && <span className="text-[10px] font-semibold text-red-300 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded font-mono">{type}</span>}
+            {protocol && <span className="text-[10px] text-orange-300 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded font-mono">{protocol}://</span>}
+            {header && <span className="text-[10px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded font-mono">JWT · {header.alg || 'unknown alg'}</span>}
+            {confidence && (
+              <span className={`text-[10px] px-2 py-0.5 rounded font-mono border ${
+                confidence === 'high' ? 'bg-red-500/15 text-red-300 border-red-500/25' :
+                confidence === 'medium' ? 'bg-amber-500/15 text-amber-300 border-amber-500/25' :
+                'bg-gray-500/15 text-gray-300 border-gray-500/25'
+              }`}>{confidence} confidence</span>
+            )}
+            {source && (
+              <span className={`text-[10px] px-2 py-0.5 rounded font-mono border flex items-center gap-1 ${sourceColor}`}>
+                {sourceIcon} {source}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => copyValue(val, id)}
+            className="flex-shrink-0 text-[10px] flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-gray-400 hover:text-white transition-all border border-white/[0.06]"
+          >
+            {copied === id ? '✅ Copied' : '📋 Copy'}
+          </button>
+        </div>
+
+        {/* Full key value — scrollable, selectable */}
+        <div className="px-4 py-3 border-b border-white/[0.03] overflow-x-auto">
+          <pre className="text-xs font-mono text-red-200 whitespace-nowrap leading-relaxed select-all">{val}</pre>
+        </div>
+
+        {/* Location info — where to find it in DevTools */}
+        {location && (
+          <div className="px-4 py-2 border-b border-white/[0.03] flex items-start gap-2">
+            <span className="text-gray-600 text-[10px] mt-0.5 flex-shrink-0">📍 Found in:</span>
+            <span className="text-gray-400 text-[11px] font-mono break-all">{location}</span>
+          </div>
+        )}
+
+        {/* Surrounding snippet for DevTools context */}
+        {snippet && (
+          <details className="group">
+            <summary className="px-4 py-1.5 text-[10px] text-gray-600 hover:text-gray-400 cursor-pointer transition-colors list-none flex items-center gap-1 select-none">
+              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+              Show surrounding context (for browser Inspect)
+            </summary>
+            <div className="px-4 pb-3">
+              <pre className="text-[10px] font-mono text-gray-500 bg-dark-950/60 rounded-lg p-3 overflow-x-auto border border-white/[0.03] whitespace-pre-wrap break-all leading-relaxed">{snippet}</pre>
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
+
+  const LeakSection = ({ title, icon, items, sectionId, color = 'red' }) => {
     if (items.length === 0) return null;
     return (
-      <div className="mb-4">
-        <div className="section-header">
-          <div className={`section-header-icon bg-${color}-500/10 text-${color}-400`}>{icon}</div>
-          <span className="section-header-text">{title}</span>
-          <span className="section-header-count text-red-400">{items.length} found</span>
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 py-2 border-b border-white/[0.05]">
+          <div className={`w-7 h-7 rounded-lg bg-${color}-500/10 text-${color}-400 flex items-center justify-center text-sm flex-shrink-0`}>{icon}</div>
+          <span className="text-gray-200 font-semibold text-sm">{title}</span>
+          <span className="ml-auto text-xs font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">{items.length} found</span>
         </div>
-        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+        <div className="space-y-2">
           {items.map((item, i) => (
-            <div key={i} className="leak-highlight">
-              {typeof item === 'object'
-                ? <span><span className="text-red-400 font-semibold">{item.type}: </span>{item.value || item.full || JSON.stringify(item)}</span>
-                : item
-              }
-            </div>
+            <LeakItem key={i} item={item} index={i} sectionId={sectionId} />
           ))}
         </div>
       </div>
@@ -1193,23 +1308,23 @@ function LeaksTab({ leaked }) {
                'High Risk — Immediate Action Required'}
             </h3>
             <p className="text-gray-500 text-sm mt-1">
-              {totalFindings} potential leak{totalFindings !== 1 ? 's' : ''} detected across all scraped pages
+              {totalFindings} potential leak{totalFindings !== 1 ? 's' : ''} detected across all scraped pages. Full values shown — click 📋 to copy any key.
             </p>
           </div>
         </div>
       </div>
 
       {/* Leak sections */}
-      <LeakSection title="API Keys & Secrets" icon="🔑" items={agg.apiKeys} />
-      <LeakSection title="AWS Credentials" icon="☁️" items={agg.awsKeys} />
-      <LeakSection title="JWT Tokens" icon="🎫" items={agg.jwtTokens} />
-      <LeakSection title="Passwords" icon="🔒" items={agg.passwords} />
-      <LeakSection title="Database URLs" icon="🗄️" items={agg.databaseUrls} />
-      <LeakSection title="S3 Buckets" icon="📦" items={agg.s3Buckets} />
-      <LeakSection title="Private IPs" icon="🌐" items={agg.privateIPs} color="amber" />
-      <LeakSection title="Environment Variables" icon="📋" items={agg.envVars} color="amber" />
-      <LeakSection title="Sensitive Comments" icon="💬" items={agg.sensitiveComments} />
-      <LeakSection title="Exposed Paths" icon="📂" items={agg.exposedPaths} color="amber" />
+      <LeakSection title="API Keys & Secrets" icon="🔑" sectionId="api" items={agg.apiKeys} />
+      <LeakSection title="AWS Credentials" icon="☁️" sectionId="aws" items={agg.awsKeys} />
+      <LeakSection title="JWT Tokens" icon="🎫" sectionId="jwt" items={agg.jwtTokens} />
+      <LeakSection title="Passwords" icon="🔒" sectionId="pass" items={agg.passwords} />
+      <LeakSection title="Database URLs" icon="🗄️" sectionId="db" items={agg.databaseUrls} />
+      <LeakSection title="S3 Buckets" icon="📦" sectionId="s3" items={agg.s3Buckets} />
+      <LeakSection title="Private IPs" icon="🌐" sectionId="ip" items={agg.privateIPs} color="amber" />
+      <LeakSection title="Environment Variables" icon="📋" sectionId="env" items={agg.envVars} color="amber" />
+      <LeakSection title="Sensitive Comments" icon="💬" sectionId="comment" items={agg.sensitiveComments} />
+      <LeakSection title="Exposed Paths" icon="📂" sectionId="path" items={agg.exposedPaths} color="amber" />
 
       {totalFindings === 0 && (
         <div className="text-center py-10 text-gray-500">
@@ -1509,117 +1624,758 @@ function SEOSchemaTab({ results, schemaOrg, microdata, breadcrumbs, linkRelation
   );
 }
 
-/* ─── Design Intel Tab ────────────────────────────────────────── */
-function DesignIntelTab({ colorPalette, fontInfo }) {
+/* ─── UI Data Tab ────────────────────────────────────────── */
+function UIDataTab({ results }) {
+  const [expandedPage, setExpandedPage] = useState(0);
   const [section, setSection] = useState('colors');
+  const [failedImgs, setFailedImgs] = useState(new Set());
+  
+  if (!results || results.length === 0) return null;
+  
+  const result = results[expandedPage];
+  const colorPalette = result.colorPalette || result.color_palette || {};
+  const fontInfo = result.fontInfo || result.font_info || {};
+  const techStack = result.techStack || result.tech_stack || {};
+  const images = Array.isArray(result.images) ? result.images : [];
+
   const sections = [
-    { id: 'colors', label: 'Color Palette' },
-    { id: 'fonts', label: 'Typography' },
+    { id: 'colors', label: '🎨 Colors' },
+    { id: 'fonts', label: '✒️ Typography' },
+    { id: 'assets', label: `🖼️ Assets (${images.length})` },
+    { id: 'content', label: '📝 Copy & Structure' },
+    { id: 'tech', label: '⚙️ Tech Stack' },
+    { id: 'perf', label: '🚀 Performance' },
+    { id: 'nav', label: '🗺️ Navigation' },
+    { id: 'social', label: '📣 Social Preview' },
+    { id: 'forms', label: '📝 Forms' },
+    { id: 'videos', label: '🎬 Videos' },
+    { id: 'export', label: '📤 Export' },
   ];
 
-  // Merge colors from all pages
-  const mergedColors = (() => {
-    const colorMap = new Map();
-    for (const p of colorPalette) {
-      for (const c of (p.colors || [])) {
-        colorMap.set(c.color, (colorMap.get(c.color) || 0) + (c.count || 1));
-      }
-    }
-    return [...colorMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 40)
-      .map(([color, count]) => ({ color, count }));
-  })();
+  const themeColor = colorPalette.themeColor;
+  const rawColors = Array.isArray(colorPalette.colors) ? colorPalette.colors : [];
+  const pageColors = [...rawColors].sort((a, b) => (b?.count || 0) - (a?.count || 0)).slice(0, 40);
+  const cssVars = Array.isArray(colorPalette.cssVariables) ? colorPalette.cssVariables : [];
 
-  const cssVars = colorPalette.flatMap(p => p.cssVariables || []);
-  const themeColor = colorPalette.find(p => p.themeColor)?.themeColor;
+  const googleFonts = Array.isArray(fontInfo.googleFonts) ? fontInfo.googleFonts : [];
+  const customFonts = Array.isArray(fontInfo.customFonts) ? fontInfo.customFonts : [];
+  const families = Array.isArray(fontInfo.families) ? fontInfo.families : [];
+  
+  const headings = result.headings || {};
+  const paragraphs = Array.isArray(result.paragraphs) ? result.paragraphs : [];
 
-  // Merge fonts
-  const allGoogleFonts = [...new Set(fontInfo.flatMap(f => f.googleFonts || []))];
-  const allCustomFonts = [...new Set(fontInfo.flatMap(f => f.customFonts || []))];
-  const allFamilies = [...new Set(fontInfo.flatMap(f => f.families || []))];
+  // Performance & Accessibility
+  const perfMetrics = result.performanceMetrics || {};
+  const a11yScore = result.accessibilityScore || {};
+  const contentQuality = result.contentQuality || {};
+  const wordCount = result.wordCount || 0;
+
+  // Navigation
+  const navigation = result.navigation || {};
+  const breadcrumbs = Array.isArray(result.breadcrumbs) ? result.breadcrumbs : [];
+
+  // Social Preview
+  const metadata = result.metadata || {};
+  const og = metadata.openGraph || {};
+  const tc = metadata.twitterCard || {};
+  const ogImage = og.image || tc.image || null;
+  const ogTitle = og.title || tc.title || metadata.title || result.title || null;
+  const ogDesc = og.description || tc.description || metadata.description || null;
+  const ogSiteName = og['site_name'] || og.site_name || null;
+  const ogType = og.type || null;
+  const twitterHandle = tc.site || tc.creator || null;
+  const favicon = metadata.favicon || null;
+
+  // Forms
+  const formsData = Array.isArray(result.formsData) ? result.formsData : [];
+
+  // Videos — native HTML5 videos + iframes from YouTube/Vimeo/etc
+  const nativeVideos = Array.isArray(result.videos) ? result.videos : [];
+  const iframes = Array.isArray(result.iframes) ? result.iframes : [];
+  const videoProviders = ['youtube', 'youtu.be', 'vimeo', 'wistia', 'loom', 'vidyard', 'mux', 'dailymotion', 'brightcove', 'jwplatform'];
+  const videoIframes = iframes.filter(f => f.src && videoProviders.some(p => f.src.includes(p)));
+  const allVideos = [...nativeVideos, ...videoIframes];
+
+  const getVideoThumb = (src) => {
+    if (!src) return null;
+    const ytMatch = src.match(/(?:youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/mqdefault.jpg`;
+    return null;
+  };
+
+  const getVideoId = (src) => {
+    if (!src) return null;
+    const ytMatch = src.match(/(?:youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) return { provider: 'YouTube', id: ytMatch[1] };
+    if (src.includes('vimeo')) return { provider: 'Vimeo', id: src.split('/').pop()?.split('?')[0] };
+    if (src.includes('wistia')) return { provider: 'Wistia', id: null };
+    if (src.includes('loom')) return { provider: 'Loom', id: null };
+    return { provider: 'Video', id: null };
+  };
+
+  // Export helpers
+  const exportCSS = () => {
+    const lines = [':root {'];
+    pageColors.slice(0, 20).forEach((c, i) => lines.push(`  --color-${i + 1}: ${c.color};`));
+    cssVars.forEach(v => lines.push(`  ${v.name}: ${v.value};`));
+    lines.push('}');
+    const blob = new Blob([lines.join('\n')], { type: 'text/css' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'palette.css'; a.click();
+  };
+  const exportJSON = () => {
+    const data = { colors: pageColors.map(c => ({ hex: c.color, count: c.count })), cssVariables: cssVars };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'palette.json'; a.click();
+  };
+
+  // Tech Stack — all categories as string arrays
+  const TECH_CATEGORIES = [
+    { key: 'frameworks', label: 'JS Frameworks', color: 'blue', icon: '⚛️' },
+    { key: 'cssFrameworks', label: 'CSS Frameworks', color: 'teal', icon: '🎨' },
+    { key: 'cms', label: 'CMS / Builder', color: 'purple', icon: '📝' },
+    { key: 'analytics', label: 'Analytics', color: 'orange', icon: '📊' },
+    { key: 'cdn', label: 'CDN / Infra', color: 'cyan', icon: '🌐' },
+    { key: 'hosting', label: 'Hosting', color: 'indigo', icon: '☁️' },
+    { key: 'auth', label: 'Authentication', color: 'green', icon: '🔐' },
+    { key: 'payments', label: 'Payments', color: 'emerald', icon: '💳' },
+    { key: 'ecommerce', label: 'E-Commerce', color: 'yellow', icon: '🛍️' },
+    { key: 'monitoring', label: 'Monitoring', color: 'red', icon: '🔍' },
+    { key: 'security', label: 'Security / WAF', color: 'rose', icon: '🛡️' },
+    { key: 'chat', label: 'Chat / Support', color: 'sky', icon: '💬' },
+    { key: 'emailMarketing', label: 'Email Marketing', color: 'violet', icon: '📧' },
+    { key: 'advertising', label: 'Advertising', color: 'amber', icon: '📢' },
+    { key: 'buildTools', label: 'Build Tools', color: 'lime', icon: '🔧' },
+    { key: 'devops', label: 'Backend / DevOps', color: 'slate', icon: '🖥️' },
+    { key: 'maps', label: 'Maps', color: 'teal', icon: '🗺️' },
+    { key: 'videoPlayers', label: 'Video', color: 'pink', icon: '🎬' },
+    { key: 'socialWidgets', label: 'Social Widgets', color: 'blue', icon: '🔗' },
+    { key: 'abTesting', label: 'A/B Testing', color: 'orange', icon: '🧪' },
+    { key: 'fonts', label: 'Font Providers', color: 'purple', icon: '🔤' },
+  ];
+  const COLOR_MAP = {
+    blue: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
+    teal: 'bg-teal-500/10 text-teal-300 border-teal-500/20',
+    purple: 'bg-purple-500/10 text-purple-300 border-purple-500/20',
+    orange: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+    cyan: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+    indigo: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
+    green: 'bg-green-500/10 text-green-300 border-green-500/20',
+    emerald: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+    yellow: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20',
+    red: 'bg-red-500/10 text-red-300 border-red-500/20',
+    rose: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
+    sky: 'bg-sky-500/10 text-sky-300 border-sky-500/20',
+    violet: 'bg-violet-500/10 text-violet-300 border-violet-500/20',
+    amber: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+    lime: 'bg-lime-500/10 text-lime-300 border-lime-500/20',
+    slate: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    pink: 'bg-pink-500/10 text-pink-300 border-pink-500/20',
+  };
+
+  const detectedCats = TECH_CATEGORIES.filter(cat => {
+    const items = techStack[cat.key];
+    return Array.isArray(items) && items.length > 0;
+  });
+  const totalTech = detectedCats.reduce((sum, cat) => sum + (techStack[cat.key]?.length || 0), 0);
 
   return (
-    <div>
-      <div className="flex gap-2 mb-4">
+    <div className="space-y-4 animate-fade-in">
+      {/* Page Selector */}
+      {results.length > 1 && (
+        <div className="flex items-center gap-3 bg-dark-800/50 p-3 rounded-xl border border-white/[0.05]">
+          <span className="text-gray-400 text-xs font-medium">Viewing Page:</span>
+          <select
+            value={expandedPage}
+            onChange={(e) => { setExpandedPage(parseInt(e.target.value)); setSection('colors'); }}
+            className="flex-1 bg-dark-900 border border-white/[0.1] rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-pink-500/50 transition-colors"
+          >
+            {results.map((r, i) => (
+              <option key={i} value={i}>{r.pageUrl}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap pb-2 border-b border-white/[0.05]">
         {sections.map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-dark-700/50 text-gray-400 hover:text-gray-300 border border-dark-600/30'}`}>
+            className={`px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 ${
+              section === s.id 
+                ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 text-pink-300 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.1)]' 
+                : 'bg-dark-700/30 text-gray-400 hover:text-gray-200 border border-dark-600/30 hover:border-dark-500/50'
+            }`}>
             {s.label}
           </button>
         ))}
       </div>
 
-      {section === 'colors' && (
-        <div className="space-y-4">
-          {themeColor && (
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-gray-500 text-sm">Theme color:</span>
-              <div className="w-8 h-8 rounded-lg border border-dark-500 shadow-lg" style={{ backgroundColor: themeColor }} />
-              <span className="text-white text-sm font-mono">{themeColor}</span>
-            </div>
-          )}
-          <div className="text-gray-500 text-xs mb-2">{mergedColors.length} unique colors detected</div>
-          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-            {mergedColors.map((c, i) => (
-              <div key={i} className="group relative">
-                <div className="w-full aspect-square rounded-lg border border-dark-500 shadow-md cursor-pointer hover:scale-110 transition-transform" style={{ backgroundColor: c.color }} />
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-dark-800 border border-dark-600 rounded px-1.5 py-0.5 text-[9px] text-white font-mono whitespace-nowrap z-10">
-                  {c.color} ({c.count}×)
+      <div className="pt-2">
+        {section === 'colors' && (
+          <div className="space-y-6 animate-slide-up">
+            {themeColor && (
+              <div className="flex items-center gap-4 bg-dark-800/40 p-4 rounded-xl border border-white/[0.05]">
+                <div className="w-12 h-12 rounded-xl shadow-lg border border-white/10" style={{ backgroundColor: themeColor }} />
+                <div>
+                  <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Theme Color</div>
+                  <div className="text-white font-mono text-sm">{themeColor}</div>
                 </div>
               </div>
-            ))}
+            )}
+            
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-gray-300 text-sm font-medium flex items-center gap-2"><span className="text-pink-400">🎨</span> Detected Colors</h4>
+                <span className="text-xs text-gray-500 font-mono bg-white/[0.03] px-2 py-1 rounded-md">{pageColors.length} unique</span>
+              </div>
+              
+              {pageColors.length === 0 ? (
+                <div className="text-center py-10 bg-dark-800/20 rounded-xl border border-white/[0.02] text-gray-500 text-sm">No specific colors detected for this page.</div>
+              ) : (
+                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                  {pageColors.map((c, i) => (
+                    <div key={i} className="group relative flex flex-col items-center gap-2">
+                      <div className="w-full aspect-square rounded-xl border border-white/[0.08] shadow-[0_4px_12px_rgba(0,0,0,0.5)] cursor-copy hover:scale-110 hover:-translate-y-1 transition-all duration-300" 
+                           style={{ backgroundColor: c.color }}
+                           title={`Click to copy ${c.color}`}
+                           onClick={() => navigator.clipboard.writeText(c.color)}
+                      />
+                      <div className="text-[10px] text-gray-400 font-mono uppercase tracking-wider opacity-60 group-hover:opacity-100 transition-opacity">
+                        {c.color}
+                      </div>
+                      <div className="absolute -top-8 bg-dark-900 border border-white/10 px-2 py-1 rounded text-[9px] text-pink-300 font-mono opacity-0 group-hover:opacity-100 transition-all z-10 pointer-events-none transform translate-y-2 group-hover:translate-y-0">
+                        {c.count} occurrences
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {cssVars.length > 0 && (
+              <div className="mt-8">
+                <h4 className="text-gray-300 text-sm font-medium mb-3 flex items-center gap-2"><span className="text-purple-400">CSS</span> Custom Properties</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {cssVars.map((v, i) => (
+                    <div key={i} className="bg-dark-800/40 rounded-xl p-3 border border-white/[0.05] hover:border-white/[0.1] transition-colors flex items-center gap-3 group cursor-pointer" onClick={() => navigator.clipboard.writeText(v.value)} title="Click to copy">
+                      <div className="w-8 h-8 rounded-lg border border-white/10 shadow-inner flex-shrink-0 relative overflow-hidden">
+                        <div className="absolute inset-0 pattern-grid-sm opacity-20" />
+                        <div className="absolute inset-0" style={{ backgroundColor: v.value }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-gray-400 text-[10px] font-mono truncate mb-0.5">{v.name}</div>
+                        <div className="text-white text-xs font-mono truncate">{v.value}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          {cssVars.length > 0 && (
-            <div className="mt-6">
-              <h4 className="text-gray-400 text-xs font-medium mb-2">CSS Custom Properties</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {cssVars.map((v, i) => (
-                  <div key={i} className="bg-dark-750 rounded-lg px-3 py-2 border border-dark-600/30 flex items-center gap-3">
-                    <div className="w-5 h-5 rounded border border-dark-500 flex-shrink-0" style={{ backgroundColor: v.value }} />
-                    <span className="text-gray-500 text-xs font-mono flex-1 truncate">{v.name}</span>
-                    <span className="text-gray-300 text-xs font-mono">{v.value}</span>
+        )}
+
+        {section === 'fonts' && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2"><span className="text-blue-400">G</span> Google Fonts</h4>
+                {googleFonts.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {googleFonts.map((f, i) => <span key={i} className="bg-blue-500/10 text-blue-300 border border-blue-500/20 px-3 py-1.5 rounded-lg text-xs font-medium">{f}</span>)}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-xs italic">No Google Fonts detected.</p>
+                )}
+              </div>
+              
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2"><span className="text-purple-400">@</span> Custom @font-face</h4>
+                {customFonts.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {customFonts.map((f, i) => <span key={i} className="bg-purple-500/10 text-purple-300 border border-purple-500/20 px-3 py-1.5 rounded-lg text-xs font-medium">{f}</span>)}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-xs italic">No custom web fonts detected.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+              <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2"><span className="text-emerald-400">T</span> Font Families Used</h4>
+              {families.length > 0 ? (
+                <div className="space-y-2">
+                  {families.map((f, i) => (
+                    <div key={i} className="bg-dark-900/50 rounded-lg px-4 py-3 border border-dark-600/30 flex items-center justify-between group">
+                      <span className="text-gray-300 text-sm font-mono tracking-wide" style={{ fontFamily: f.split(',')[0] }}>{f}</span>
+                      <span className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">Preview</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-xs italic text-center py-4">No font families extracted from styles.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {section === 'assets' && (
+          <div className="space-y-4 animate-slide-up">
+            <div className="flex items-center justify-between">
+              <h4 className="text-gray-300 text-sm font-medium flex items-center gap-2">
+                🖼️ Page Visual Assets
+              </h4>
+              <span className="text-xs text-gray-500 font-mono bg-white/[0.03] px-2 py-1 rounded-md">
+                {images.length} images on this page
+              </span>
+            </div>
+            {images.length === 0 ? (
+              <div className="text-center py-10 bg-dark-800/20 rounded-xl border border-white/[0.02] text-gray-500 text-sm">No images found on this page.</div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {images.map((img, i) => (
+                  <div key={i} className="bg-dark-800/30 rounded-xl border border-white/[0.05] overflow-hidden group hover:border-white/10 transition-colors flex flex-col">
+                    <div className="aspect-video bg-dark-900 relative overflow-hidden flex items-center justify-center">
+                      {failedImgs.has(img.src) ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-gray-600">
+                          <span className="text-2xl">🖼️</span>
+                          <span className="text-[10px] font-mono text-center px-2 break-all">{img.src?.split('/').slice(-1)[0] || 'image'}</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={img.src}
+                          alt={img.alt || ''}
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                          onError={() => setFailedImgs(prev => new Set([...prev, img.src]))}
+                        />
+                      )}
+                    </div>
+                    <div className="p-3 bg-dark-800/50 flex-1 flex flex-col">
+                      <p className="text-xs text-gray-300 truncate mb-1 font-medium" title={img.alt}>{img.alt || 'Unnamed image'}</p>
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/[0.05]">
+                        <span className="text-[9px] text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded font-mono uppercase">{img.source || 'img'}</span>
+                        <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-500 hover:text-white transition-colors">Open ↗</a>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
-      {section === 'fonts' && (
-        <div className="space-y-4">
-          {allGoogleFonts.length > 0 && (
-            <div>
-              <h4 className="text-gray-400 text-xs font-medium mb-2">Google Fonts</h4>
-              <div className="flex flex-wrap gap-2">
-                {allGoogleFonts.map((f, i) => <span key={i} className="badge badge-blue">{f}</span>)}
+        {section === 'content' && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2"><span className="text-pink-400">H</span> Typographical Hierarchy</h4>
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                  {Object.entries(headings).length === 0 ? (
+                    <p className="text-gray-500 text-xs italic">No headings extracted.</p>
+                  ) : (
+                    Object.entries(headings).map(([level, items]) =>
+                      items.map((h, i) => (
+                        <div key={`${level}-${i}`} className="flex items-start gap-3">
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded uppercase flex-shrink-0 ${
+                            level === 'h1' ? 'bg-pink-500/20 text-pink-300' :
+                            level === 'h2' ? 'bg-purple-500/20 text-purple-300' :
+                            'bg-white/[0.05] text-gray-400'
+                          }`}>
+                            {level}
+                          </span>
+                          <span className={`text-sm ${level === 'h1' ? 'text-white font-medium' : 'text-gray-300'}`}>{h}</span>
+                        </div>
+                      ))
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2"><span className="text-blue-400">¶</span> Key Content Blocks</h4>
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                  {paragraphs.length === 0 ? (
+                    <p className="text-gray-500 text-xs italic">No significant text paragraphs found.</p>
+                  ) : (
+                    paragraphs.slice(0, 30).map((p, i) => (
+                      <p key={i} className="text-gray-400 text-sm leading-relaxed border-l-2 border-dark-600 pl-3">
+                        {p}
+                      </p>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          )}
-          {allCustomFonts.length > 0 && (
-            <div>
-              <h4 className="text-gray-400 text-xs font-medium mb-2">Custom @font-face</h4>
-              <div className="flex flex-wrap gap-2">
-                {allCustomFonts.map((f, i) => <span key={i} className="badge badge-purple">{f}</span>)}
+          </div>
+        )}
+
+        {section === 'tech' && (
+          <div className="animate-slide-up space-y-4">
+            {/* Summary banner */}
+            <div className="flex items-center justify-between bg-dark-800/40 p-4 rounded-xl border border-white/[0.05]">
+              <div>
+                <div className="text-white font-semibold text-lg">{totalTech} technologies</div>
+                <div className="text-gray-400 text-xs mt-0.5">{detectedCats.length} categories detected</div>
+              </div>
+              <div className="flex gap-2">
+                {techStack.server && <span className="text-[10px] bg-dark-700 border border-dark-600/40 px-2 py-1 rounded text-gray-400 font-mono">Server: {techStack.server}</span>}
+                {techStack.poweredBy && <span className="text-[10px] bg-dark-700 border border-dark-600/40 px-2 py-1 rounded text-gray-400 font-mono">Powered by: {techStack.poweredBy}</span>}
               </div>
             </div>
-          )}
-          {allFamilies.length > 0 && (
+
+            {detectedCats.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 text-sm bg-dark-800/20 rounded-xl border border-white/[0.02]">No technologies detected on this page.</div>
+            ) : (
+              <div className="space-y-4">
+                {detectedCats.map(cat => {
+                  const items = techStack[cat.key] || [];
+                  const cls = COLOR_MAP[cat.color] || 'bg-white/5 text-gray-300 border-white/10';
+                  return (
+                    <div key={cat.key} className="bg-dark-800/30 rounded-xl p-4 border border-white/[0.05]">
+                      <h5 className="text-gray-300 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <span>{cat.icon}</span>{cat.label}
+                        <span className="ml-auto text-gray-600 font-mono">{items.length}</span>
+                      </h5>
+                      <div className="flex flex-wrap gap-2">
+                        {items.map((tech, i) => (
+                          <span key={i} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${cls}`}>{tech}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'perf' && (
+          <div className="animate-slide-up space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Word Count', value: wordCount, suffix: 'words', color: 'blue' },
+                { label: 'Images', value: images.length, suffix: 'found', color: 'pink' },
+                { label: 'SEO Score', value: result.seoScore?.score ?? '—', suffix: '/100', color: 'emerald' },
+                { label: 'Accessibility', value: typeof a11yScore.score === 'number' ? `${Math.round(a11yScore.score)}%` : '—', suffix: '', color: 'purple' },
+              ].map((m, i) => (
+                <div key={i} className="bg-dark-800/30 rounded-xl p-4 border border-white/[0.05] text-center">
+                  <div className={`text-2xl font-bold text-${m.color}-400`}>{m.value}{m.suffix ? <span className="text-sm font-normal text-gray-500 ml-1">{m.suffix}</span> : null}</div>
+                  <div className="text-gray-400 text-xs mt-1">{m.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {Object.keys(a11yScore).length > 0 && (
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">♿ Accessibility Checks</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(a11yScore).filter(([k]) => k !== 'score').map(([check, pass], i) => (
+                    <div key={i} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs ${
+                      pass ? 'bg-green-500/5 text-green-300 border-green-500/20' : 'bg-red-500/5 text-red-300 border-red-500/20'
+                    }`}>
+                      <span>{pass ? '✅' : '❌'}</span>
+                      <span className="capitalize">{check.replace(/([A-Z])/g, ' $1').trim()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Object.keys(perfMetrics).length > 0 && (
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">⚡ Performance Hints</h4>
+                <div className="space-y-2">
+                  {Object.entries(perfMetrics).map(([k, v], i) => (
+                    <div key={i} className="flex items-center justify-between bg-dark-900/50 rounded-lg px-3 py-2 border border-dark-600/30">
+                      <span className="text-gray-400 text-xs capitalize">{k.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <span className="text-white text-xs font-mono">{typeof v === 'boolean' ? (v ? '✅ Yes' : '❌ No') : String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Object.keys(contentQuality).length > 0 && (
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">📊 Content Quality</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {Object.entries(contentQuality).map(([k, v], i) => (
+                    <div key={i} className="bg-dark-900/50 rounded-lg px-3 py-2 border border-dark-600/30">
+                      <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">{k.replace(/([A-Z])/g, ' $1').trim()}</div>
+                      <div className="text-white text-sm font-mono">{typeof v === 'boolean' ? (v ? '✅' : '❌') : String(v)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'nav' && (
+          <div className="animate-slide-up space-y-4">
+            {breadcrumbs.length > 0 && (
+              <div className="bg-dark-800/30 rounded-xl p-4 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-3 flex items-center gap-2">🍞 Breadcrumbs</h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  {breadcrumbs.map((b, i) => (
+                    <span key={i} className="flex items-center gap-2">
+                      {i > 0 && <span className="text-gray-600">›</span>}
+                      <span className="text-xs text-gray-300 bg-dark-700/50 border border-dark-600/30 px-2 py-1 rounded">{b.name || b}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {navigation && Object.keys(navigation).length > 0 && (
+              <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+                <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">🗺️ Site Navigation Structure</h4>
+                <div className="space-y-4">
+                  {navigation.primaryNav && navigation.primaryNav.length > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-[10px] uppercase tracking-widest mb-2">Primary Navigation</div>
+                      <div className="flex flex-wrap gap-2">
+                        {navigation.primaryNav.map((item, i) => (
+                          <span key={i} className="text-xs bg-blue-500/10 text-blue-300 border border-blue-500/20 px-3 py-1.5 rounded-lg">{item.text || item.label || item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {navigation.footerNav && navigation.footerNav.length > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-[10px] uppercase tracking-widest mb-2">Footer Navigation</div>
+                      <div className="flex flex-wrap gap-2">
+                        {navigation.footerNav.map((item, i) => (
+                          <span key={i} className="text-xs bg-slate-500/10 text-slate-300 border border-slate-500/20 px-3 py-1.5 rounded-lg">{item.text || item.label || item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {navigation.ctas && navigation.ctas.length > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-[10px] uppercase tracking-widest mb-2">Call-to-Action Buttons</div>
+                      <div className="flex flex-wrap gap-2">
+                        {navigation.ctas.map((item, i) => (
+                          <span key={i} className="text-xs bg-pink-500/10 text-pink-300 border border-pink-500/20 px-3 py-1.5 rounded-lg">{item.text || item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(!navigation.primaryNav?.length && !navigation.footerNav?.length && !navigation.ctas?.length) && (
+                    <p className="text-gray-500 text-xs italic text-center py-4">No structured navigation detected on this page.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {breadcrumbs.length === 0 && (!navigation || Object.keys(navigation).length === 0) && (
+              <div className="text-center py-10 bg-dark-800/20 rounded-xl border border-white/[0.02] text-gray-500 text-sm">No navigation data found for this page.</div>
+            )}
+          </div>
+        )}
+
+        {section === 'social' && (
+          <div className="animate-slide-up space-y-6">
+            {/* OG Preview Card — Twitter style */}
             <div>
-              <h4 className="text-gray-400 text-xs font-medium mb-2">Font Families Used ({allFamilies.length})</h4>
-              <div className="space-y-1">
-                {allFamilies.map((f, i) => (
-                  <div key={i} className="bg-dark-750 rounded-lg px-3 py-2 border border-dark-600/30 text-gray-300 text-sm font-mono">{f}</div>
+              <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">🐦 Twitter / X Card Preview</h4>
+              <div className="bg-dark-800/40 rounded-2xl border border-white/[0.08] overflow-hidden max-w-lg">
+                {ogImage ? (
+                  <img src={ogImage} alt="OG Image" referrerPolicy="no-referrer" className="w-full aspect-video object-cover" onError={(e) => { e.target.style.display='none'; }} />
+                ) : (
+                  <div className="w-full aspect-video bg-dark-700/50 flex items-center justify-center text-gray-600 text-sm">No og:image found</div>
+                )}
+                <div className="p-4">
+                  {ogSiteName && <div className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">{ogSiteName}</div>}
+                  <div className="text-white font-semibold text-sm leading-snug mb-1">{ogTitle || 'No title found'}</div>
+                  <div className="text-gray-400 text-xs leading-relaxed line-clamp-2">{ogDesc || 'No description found'}</div>
+                  {twitterHandle && <div className="text-gray-600 text-[10px] mt-2">{twitterHandle}</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* LinkedIn / Facebook card */}
+            <div>
+              <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">👥 LinkedIn / Facebook Preview</h4>
+              <div className="bg-dark-800/40 rounded-xl border border-white/[0.08] overflow-hidden max-w-lg flex">
+                {ogImage && (
+                  <img src={ogImage} alt="OG Image" referrerPolicy="no-referrer" className="w-28 flex-shrink-0 object-cover" onError={(e) => e.currentTarget.parentElement.removeChild(e.currentTarget)} />
+                )}
+                <div className="p-4 min-w-0">
+                  {ogSiteName && <div className="text-gray-500 text-[10px] uppercase mb-1">{ogSiteName}</div>}
+                  <div className="text-white text-sm font-medium truncate">{ogTitle || 'No title found'}</div>
+                  <div className="text-gray-400 text-xs mt-1 line-clamp-2 leading-relaxed">{ogDesc || 'No description'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* All raw OG tags */}
+            <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+              <h4 className="text-gray-300 text-sm font-medium mb-4 flex items-center gap-2">🏷️ Raw Open Graph / Twitter Tags</h4>
+              {Object.keys(og).length === 0 && Object.keys(tc).length === 0 ? (
+                <p className="text-gray-500 text-xs italic">No Open Graph or Twitter tags found on this page.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[...Object.entries(og).map(([k,v]) => [`og:${k}`, v]), ...Object.entries(tc).map(([k,v]) => [`twitter:${k}`, v])].map(([k, v], i) => (
+                    <div key={i} className="bg-dark-900/50 rounded-lg px-3 py-2 border border-dark-600/30">
+                      <div className="text-gray-500 text-[10px] font-mono mb-0.5">{k}</div>
+                      <div className="text-gray-200 text-xs truncate" title={v}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {favicon && (
+              <div className="bg-dark-800/30 rounded-xl p-4 border border-white/[0.05] flex items-center gap-3">
+                <img src={favicon} alt="Favicon" referrerPolicy="no-referrer" className="w-8 h-8" onError={(e) => e.currentTarget.style.display='none'} />
+                <div>
+                  <div className="text-gray-400 text-xs font-mono">{favicon}</div>
+                  <div className="text-gray-600 text-[10px]">Favicon</div>
+                </div>
+              </div>
+            )}
+            {ogType && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-xs">Page type:</span>
+                <span className="text-xs bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">{ogType}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'forms' && (
+          <div className="animate-slide-up space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-gray-300 text-sm font-medium flex items-center gap-2">📝 Page Forms</h4>
+              <span className="text-xs text-gray-500 font-mono bg-white/[0.03] px-2 py-1 rounded-md">{formsData.length} forms found</span>
+            </div>
+            {formsData.length === 0 ? (
+              <div className="text-center py-10 bg-dark-800/20 rounded-xl border border-white/[0.02] text-gray-500 text-sm">No forms detected on this page.</div>
+            ) : (
+              <div className="space-y-4">
+                {formsData.map((form, fi) => (
+                  <div key={fi} className="bg-dark-800/30 rounded-xl border border-white/[0.05] overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-800/50 border-b border-white/[0.05]">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${form.method === 'POST' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300'}`}>{form.method}</span>
+                      <span className="text-xs text-gray-400 font-mono truncate flex-1">{form.action || '(same page)'}</span>
+                      <span className="text-[10px] text-gray-600">{form.fields.length} fields</span>
+                    </div>
+                    <div className="p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {form.fields.filter(f => f.type !== 'hidden').map((field, fli) => (
+                          <div key={fli} className="bg-dark-900/50 rounded-lg p-3 border border-dark-600/30">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                                field.type === 'submit' ? 'bg-green-500/20 text-green-300' :
+                                field.type === 'password' ? 'bg-red-500/20 text-red-300' :
+                                field.type === 'email' ? 'bg-blue-500/20 text-blue-300' :
+                                field.tag === 'select' ? 'bg-purple-500/20 text-purple-300' :
+                                field.tag === 'textarea' ? 'bg-amber-500/20 text-amber-300' :
+                                'bg-white/[0.05] text-gray-400'
+                              }`}>{field.type || field.tag}</span>
+                              {field.required && <span className="text-[9px] text-red-400">required</span>}
+                            </div>
+                            <div className="text-gray-300 text-xs font-medium truncate">{field.name || field.id || field.placeholder || '—'}</div>
+                            {field.placeholder && <div className="text-gray-600 text-[10px] truncate mt-0.5">"{field.placeholder}"</div>}
+                          </div>
+                        ))}
+                      </div>
+                      {form.fields.filter(f => f.type === 'hidden').length > 0 && (
+                        <div className="mt-2 text-xs text-gray-600">{form.fields.filter(f => f.type === 'hidden').length} hidden fields</div>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {section === 'videos' && (
+          <div className="animate-slide-up space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-gray-300 text-sm font-medium flex items-center gap-2">🎬 Embedded Videos</h4>
+              <span className="text-xs text-gray-500 font-mono bg-white/[0.03] px-2 py-1 rounded-md">{allVideos.length} videos found</span>
             </div>
-          )}
-          {allGoogleFonts.length === 0 && allCustomFonts.length === 0 && allFamilies.length === 0 && (
-            <div className="text-center py-8 text-gray-500 text-sm">No font information detected</div>
-          )}
-        </div>
-      )}
+            {allVideos.length === 0 ? (
+              <div className="text-center py-10 bg-dark-800/20 rounded-xl border border-white/[0.02] text-gray-500 text-sm">No embedded videos found on this page.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allVideos.map((vid, i) => {
+                  const src = vid.src;
+                  const thumb = vid.poster || getVideoThumb(src);
+                  const info = getVideoId(src);
+                  return (
+                    <div key={i} className="bg-dark-800/30 rounded-xl border border-white/[0.05] overflow-hidden group hover:border-white/10 transition-colors">
+                      <div className="aspect-video bg-dark-900 relative overflow-hidden flex items-center justify-center">
+                        {thumb ? (
+                          <img src={thumb} alt="Video thumbnail" referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => e.currentTarget.style.display='none'} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-600 text-4xl">🎬</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <a href={src} target="_blank" rel="noopener noreferrer" className="bg-white/20 backdrop-blur-sm border border-white/30 text-white text-xs px-3 py-1.5 rounded-full hover:bg-white/30 transition-colors">▶ Open</a>
+                        </div>
+                        {info && <span className="absolute bottom-2 left-2 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded font-mono">{info.provider}</span>}
+                      </div>
+                      <div className="p-3">
+                        <p className="text-xs text-gray-400 font-mono truncate">{vid.title || src?.split('/').slice(-1)[0] || 'Embedded video'}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'export' && (
+          <div className="animate-slide-up space-y-6">
+            <div className="bg-dark-800/30 rounded-xl p-6 border border-white/[0.05]">
+              <h4 className="text-gray-300 text-sm font-medium mb-2">📤 Export Color Palette</h4>
+              <p className="text-gray-500 text-xs mb-6">Download the extracted color palette in your preferred format. All {pageColors.length} colors + {cssVars.length} CSS variables included.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button onClick={exportCSS}
+                  className="group flex flex-col items-start gap-3 bg-dark-900/50 hover:bg-purple-500/10 border border-dark-600/40 hover:border-purple-500/30 rounded-xl p-5 transition-all duration-300 text-left">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">🎨</div>
+                  <div>
+                    <div className="text-white font-semibold text-sm">CSS Variables</div>
+                    <div className="text-gray-500 text-xs mt-0.5">Downloads as <span className="font-mono text-purple-400">palette.css</span> with <code className="text-purple-300">:root</code> variables</div>
+                  </div>
+                  <span className="text-xs text-purple-400 font-medium">Download →</span>
+                </button>
+
+                <button onClick={exportJSON}
+                  className="group flex flex-col items-start gap-3 bg-dark-900/50 hover:bg-blue-500/10 border border-dark-600/40 hover:border-blue-500/30 rounded-xl p-5 transition-all duration-300 text-left">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">📦</div>
+                  <div>
+                    <div className="text-white font-semibold text-sm">JSON Format</div>
+                    <div className="text-gray-500 text-xs mt-0.5">Downloads as <span className="font-mono text-blue-400">palette.json</span> with hex + count data</div>
+                  </div>
+                  <span className="text-xs text-blue-400 font-medium">Download →</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Preview of what will be exported */}
+            <div className="bg-dark-800/30 rounded-xl p-5 border border-white/[0.05]">
+              <h4 className="text-gray-400 text-xs font-medium mb-3 uppercase tracking-widest">Preview — CSS Output</h4>
+              <pre className="bg-dark-950/80 rounded-lg p-4 text-[11px] font-mono text-gray-300 overflow-x-auto border border-white/[0.04] max-h-60 overflow-y-auto">{[
+                ':root {',
+                ...pageColors.slice(0, 10).map((c, i) => `  --color-${i + 1}: ${c.color};`),
+                ...cssVars.slice(0, 5).map(v => `  ${v.name}: ${v.value};`),
+                pageColors.length > 10 ? `  /* ... ${pageColors.length - 10} more colors */` : null,
+                '}',
+              ].filter(Boolean).join('\n')}</pre>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
