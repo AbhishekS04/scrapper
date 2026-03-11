@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import URLInput from '../components/URLInput.jsx';
+import AdvancedURLInput from '../components/AdvancedURLInput.jsx';
 import ProgressPanel from '../components/ProgressPanel.jsx';
 import ResultsTabs from '../components/ResultsTabs.jsx';
 import ExportBar from '../components/ExportBar.jsx';
@@ -7,6 +8,7 @@ import { useScrapeJob } from '../hooks/useScrapeJob.js';
 
 export default function Home() {
   const { jobId, jobData, loading, error, progress, status, stats, startScrape, reset } = useScrapeJob();
+  const [extractionMode, setExtractionMode] = useState('standard');
 
   const showHero = status === 'idle';
 
@@ -58,9 +60,44 @@ export default function Home() {
         </div>
       )}
 
+      {/* Mode Toggle */}
+      {showHero && (
+        <div className="flex justify-center mb-6 relative z-10 animate-fade-in delay-200">
+          <div className="bg-dark-800/80 backdrop-blur-md p-1 rounded-xl flex items-center border border-white/5">
+            <button
+              onClick={() => setExtractionMode('standard')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                extractionMode === 'standard' 
+                  ? 'bg-white/10 text-white shadow-sm' 
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              }`}
+            >
+              Standard Mode
+            </button>
+            <button
+              onClick={() => setExtractionMode('advanced')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
+                extractionMode === 'advanced' 
+                  ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner' 
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              Advanced AI Mode
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* URL Input */}
       <div className="px-4 sm:px-6 relative z-10">
-        <URLInput onSubmit={startScrape} loading={status === 'running'} />
+        {extractionMode === 'standard' ? (
+          <URLInput onSubmit={startScrape} loading={status === 'running'} />
+        ) : (
+          <AdvancedURLInput onSubmit={startScrape} loading={status === 'running'} />
+        )}
       </div>
 
       {/* Error */}

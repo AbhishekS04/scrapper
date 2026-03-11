@@ -10,74 +10,13 @@ export function useScrapeJob() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState([]);
-  const [status, setStatus] = useState('idle'); // idle, running, completed, failed
+  const [status, setStatus] = useState('idle');
   const [stats, setStats] = useState({ pagesScraped: 0, totalFound: 0, percentage: 0 });
   const eventSourceRef = useRef(null);
-  const tokenRef = useRef(null);
-
-  // Keep token ref updated
-  useEffect(() => {
-    getToken().then(t => { tokenRef.current = t; });
-  }, [getToken]);
 
   // Cleanup SSE on unmount
   useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
-
-  const connectSSE = useCallback((id) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const es = new EventSource(`${API_BASE}/stream/${id}`);
-    eventSourceRef.current = es;
-
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        setProgress(prev => {
-          const next = [...prev, data];
-          // Keep last 200 entries
-          return next.length > 200 ? next.slice(-200) : next;
-        });
-
-        if (data.pagesScraped !== undefined) {
-          setStats({
-            pagesScraped: data.pagesScraped,
-            totalFound: data.totalFound || 0,
-            percentage: data.percentage || 0,
-          });
-        }
-
-        if (data.type === 'completed') {
-          setStatus('completed');
-          es.close();
-          // Fetch final results
-          fetchJobResults(id);
-        } else if (data.type === 'failed') {
-          setStatus('failed');
-          setError(data.message || 'Scrape job failed');
-          es.close();
-        } else if (data.type === 'status' && data.status === 'running') {
-          setStatus('running');
-        }
-      } catch {}
-    };
-
-    es.onerror = () => {
-      // Might just be the connection closing after completion
-      if (status !== 'completed') {
-        // Try to fetch results anyway
-        fetchJobResults(id);
-      }
-      es.close();
-    };
+    return () => { if (eventSourceRef.current) eventSourceRef.current.close(); };
   }, []);
 
   const authHeaders = useCallback(async () => {
@@ -107,7 +46,50 @@ export function useScrapeJob() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authHeaders]);
+
+  const connectSSE = useCallback((id) => {
+    if (eventSourceRef.current) eventSourceRef.current.close();
+
+    const es = new EventSource(`${API_BASE}/stream/${id}`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        setProgress(prev => {
+          const next = [...prev, data];
+          return next.length > 200 ? next.slice(-200) : next;
+        });
+
+        if (data.pagesScraped !== undefined) {
+          setStats({
+            pagesScraped: data.pagesScraped,
+            totalFound: data.totalFound || 0,
+            percentage: data.percentage || 0,
+          });
+        }
+
+        if (data.type === 'completed') {
+          setStatus('completed');
+          es.close();
+          fetchJobResults(id);
+        } else if (data.type === 'failed') {
+          setStatus('failed');
+          setError(data.message || 'Scrape job failed');
+          es.close();
+        } else if (data.type === 'status' && data.status === 'running') {
+          setStatus('running');
+        }
+      } catch {}
+    };
+
+    es.onerror = () => {
+      fetchJobResults(id);
+      es.close();
+    };
+  }, [fetchJobResults]);
 
   const startScrape = useCallback(async (url, options = {}) => {
     setError(null);
@@ -127,26 +109,19 @@ export function useScrapeJob() {
 
       if (!res.ok) {
         let errMsg = 'Failed to start scrape';
-        try {
-          const errData = await res.json();
-          errMsg = errData.error || errMsg;
-        } catch {
-          errMsg = `Server returned ${res.status}`;
-        }
+        try { errMsg = (await res.json()).error || errMsg; } catch {}
         throw new Error(errMsg);
       }
 
       const data = await res.json();
       setJobId(data.jobId);
-
-      // Connect SSE for live progress
       connectSSE(data.jobId);
     } catch (err) {
       setError(err.message);
       setStatus('failed');
       setLoading(false);
     }
-  }, [connectSSE]);
+  }, [authHeaders, connectSSE]);
 
   const loadJob = useCallback(async (id) => {
     setError(null);
@@ -167,16 +142,5 @@ export function useScrapeJob() {
     setStats({ pagesScraped: 0, totalFound: 0, percentage: 0 });
   }, []);
 
-  return {
-    jobId,
-    jobData,
-    loading,
-    error,
-    progress,
-    status,
-    stats,
-    startScrape,
-    loadJob,
-    reset,
-  };
+  return { jobId, jobData, loading, error, progress, status, stats, startScrape, loadJob, reset };
 }

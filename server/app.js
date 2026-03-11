@@ -18,6 +18,9 @@ import { clerkMiddleware, getAuth } from '@clerk/express';
 import { scrapeRoutes } from './routes/scrape.js';
 import { jobsRoutes } from './routes/jobs.js';
 import { exportRoutes } from './routes/export.js';
+import { searchRoutes } from './routes/search.js';
+import { monitorRoutes } from './routes/monitors.js';
+import { proxyRoutes } from './routes/proxy.js';
 
 const app = express();
 
@@ -58,6 +61,9 @@ app.use('/api', (req, res, next) => {
 app.use('/api', scrapeRoutes);
 app.use('/api', jobsRoutes);
 app.use('/api', exportRoutes);
+app.use('/api', searchRoutes);
+app.use('/api', monitorRoutes);
+app.use('/api', proxyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -72,8 +72,32 @@ async function migrate() {
 
     // Add user_id column if it doesn't exist (for existing databases)
     await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'anonymous';`;
-
     await sql`CREATE INDEX IF NOT EXISTS idx_scrape_jobs_user_id ON scrape_jobs(user_id);`;
+
+    // Add AI fields if they don't exist
+    await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS ai_prompt TEXT;`;
+    await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS ai_extraction_data JSONB;`;
+    await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS anti_bot BOOLEAN DEFAULT false;`;
+    await sql`ALTER TABLE scrape_jobs ADD COLUMN IF NOT EXISTS embeddings JSONB DEFAULT '[]';`;
+
+    // Create monitors table for change detection
+    await sql`
+      CREATE TABLE IF NOT EXISTS monitors (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        label TEXT,
+        interval_minutes INTEGER NOT NULL DEFAULT 60,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        last_checked_at TIMESTAMP,
+        last_changed_at TIMESTAMP,
+        last_content_hash TEXT,
+        last_snapshot_text TEXT,
+        change_count INTEGER DEFAULT 0,
+        last_diff JSONB DEFAULT '{}',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
 
     // Add advanced columns if they don't exist
     const advancedCols = [

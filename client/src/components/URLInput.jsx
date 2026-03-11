@@ -44,6 +44,12 @@ const OPTION_GROUPS = [
       { key: 'checkBrokenLinks', label: 'Broken Links', icon: '🔗', desc: 'Check every link for 404s and redirects' },
     ],
   },
+  {
+    title: 'Anti-Bot & Stealth',
+    items: [
+      { key: 'antiBot', label: 'Anti-Bot Mode', icon: '🥷', desc: 'Stealth headers, navigator masking & optional proxy routing' },
+    ],
+  },
 ];
 
 export default function URLInput({ onSubmit, loading }) {
@@ -51,6 +57,11 @@ export default function URLInput({ onSubmit, loading }) {
   const [protocol, setProtocol] = useState('https://');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activePreset, setActivePreset] = useState('standard');
+  // Logged-in scraping state
+  const [enableLogin, setEnableLogin] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [options, setOptions] = useState({
     deepScan: false,
     followLinks: true,
@@ -69,6 +80,7 @@ export default function URLInput({ onSubmit, loading }) {
     contentAnalysis: false,
     cmsDetection: false,
     checkBrokenLinks: false,
+    antiBot: false,
     depth: 2,
   });
   const inputRef = useRef(null);
@@ -98,6 +110,12 @@ export default function URLInput({ onSubmit, loading }) {
     const mappedOptions = {
       ...options,
       securityAudit: options.securityAuditOpt,
+      // Logged-in scraping fields
+      ...(enableLogin && loginUrl && loginUsername && loginPassword ? {
+        loginUrl: loginUrl.startsWith('http') ? loginUrl : 'https://' + loginUrl,
+        loginUsername,
+        loginPassword,
+      } : {}),
     };
     delete mappedOptions.securityAuditOpt;
     onSubmit(finalUrl, mappedOptions);
@@ -313,6 +331,74 @@ export default function URLInput({ onSubmit, loading }) {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* ─── Logged-in Scraping Panel ─── */}
+          <div className="mt-4 pt-4 border-t border-white/[0.06]">
+            <button
+              type="button"
+              onClick={() => setEnableLogin(v => !v)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs transition-all duration-200 text-left ${
+                enableLogin
+                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                  : 'text-gray-500 border border-transparent hover:bg-white/[0.03] hover:text-gray-400'
+              }`}
+            >
+              <span className="text-base w-6 flex-shrink-0">🔑</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">Logged-in Scraping</div>
+                <div className="text-[10px] opacity-50 mt-0.5 truncate">Provide credentials to scrape behind login walls</div>
+              </div>
+              <div className={`w-8 h-5 rounded-full transition-all duration-300 flex items-center flex-shrink-0 ${enableLogin ? 'bg-emerald-500/40 justify-end' : 'bg-dark-600 justify-start'}`}>
+                <div className={`w-3.5 h-3.5 rounded-full mx-0.5 transition-all duration-300 ${enableLogin ? 'bg-emerald-400' : 'bg-dark-500'}`} />
+              </div>
+            </button>
+
+            {enableLogin && (
+              <div className="mt-3 space-y-3 p-4 bg-emerald-500/5 border border-emerald-500/15 rounded-xl">
+                <p className="text-[10px] text-emerald-400/70">
+                  The scraper will auto-detect the login form, fill in your credentials, capture the session, then scrape the target URL while logged in.
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Login Page URL</label>
+                    <input
+                      type="text"
+                      value={loginUrl}
+                      onChange={e => setLoginUrl(e.target.value)}
+                      placeholder="https://example.com/login"
+                      className="w-full bg-dark-800/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/40 font-mono"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Username / Email</label>
+                      <input
+                        type="text"
+                        value={loginUsername}
+                        onChange={e => setLoginUsername(e.target.value)}
+                        placeholder="user@example.com"
+                        className="w-full bg-dark-800/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/40"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Password</label>
+                      <input
+                        type="password"
+                        value={loginPassword}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-dark-800/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/40"
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[9px] text-gray-600">🔒 Credentials are sent directly to your own server and never stored or logged.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

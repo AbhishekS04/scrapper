@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, jsonb, uuid, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, timestamp, integer, jsonb, uuid, pgEnum } from 'drizzle-orm/pg-core';
 
 export const jobStatusEnum = pgEnum('job_status', ['pending', 'running', 'completed', 'failed']);
 
@@ -13,6 +13,26 @@ export const scrapeJobs = pgTable('scrape_jobs', {
   pagesScraped: integer('pages_scraped').default(0),
   totalLinksFound: integer('total_links_found').default(0),
   errorMessage: text('error_message'),
+  aiPrompt: text('ai_prompt'),
+  aiExtractionData: jsonb('ai_extraction_data'),
+  antiBot: boolean('anti_bot').default(false),
+  embeddings: jsonb('embeddings').default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const monitors = pgTable('monitors', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  url: text('url').notNull(),
+  label: text('label'),
+  intervalMinutes: integer('interval_minutes').default(60).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  lastCheckedAt: timestamp('last_checked_at'),
+  lastChangedAt: timestamp('last_changed_at'),
+  lastContentHash: text('last_content_hash'),
+  lastSnapshotText: text('last_snapshot_text'),
+  changeCount: integer('change_count').default(0),
+  lastDiff: jsonb('last_diff').default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

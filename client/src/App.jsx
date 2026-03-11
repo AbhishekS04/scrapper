@@ -10,6 +10,8 @@ import {
 import Home from './pages/Home.jsx';
 import History from './pages/History.jsx';
 import Info from './pages/Info.jsx';
+import Monitors from './pages/Monitors.jsx';
+import VisualSelector from './pages/VisualSelector.jsx';
 
 function NavBar() {
   const location = useLocation();
@@ -61,6 +63,26 @@ function NavBar() {
               }`}
             >
               Info
+            </Link>
+            <Link
+              to="/monitors"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                location.pathname === '/monitors'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              <span className="text-xs">📡</span> Monitors
+            </Link>
+            <Link
+              to="/visual-selector"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                location.pathname === '/visual-selector'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              <span className="text-xs">🎯</span> Selector
             </Link>
           </SignedIn>
         </div>
@@ -139,6 +161,28 @@ function NavBar() {
             >
               Info
             </Link>
+            <Link
+              to="/monitors"
+              onClick={() => setMobileOpen(false)}
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left ${
+                location.pathname === '/monitors'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              📡 Monitors
+            </Link>
+            <Link
+              to="/visual-selector"
+              onClick={() => setMobileOpen(false)}
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left ${
+                location.pathname === '/visual-selector'
+                  ? 'text-white bg-white/[0.1]'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              🎯 Selector
+            </Link>
           </div>
         </div>
       </SignedIn>
@@ -157,6 +201,8 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/history" element={<History />} />
               <Route path="/info" element={<Info />} />
+              <Route path="/monitors" element={<Monitors />} />
+              <Route path="/visual-selector" element={<VisualSelector />} />
             </Routes>
           </SignedIn>
           <SignedOut>
