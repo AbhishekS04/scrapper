@@ -46,6 +46,8 @@ scrapeRoutes.post('/scrape', async (req, res) => {
       url: parsedUrl.href,
       status: 'pending',
       options,
+      // Save aiPrompt immediately so the AI Data tab always shows in results
+      ...(options.aiPrompt ? { aiPrompt: options.aiPrompt } : {}),
     }).returning();
 
     // Track active job

@@ -53,6 +53,30 @@ export function useScrapeJob() {
 
     const es = new EventSource(`${API_BASE}/stream/${id}`);
     eventSourceRef.current = es;
+    let pollInterval = null;
+
+    const startPolling = () => {
+      if (pollInterval) return;
+      pollInterval = setInterval(async () => {
+        try {
+          const headers = await authHeaders();
+          const res = await fetch(`${API_BASE}/job/${id}`, { headers });
+          if (!res.ok) return;
+          const data = await res.json();
+          const jobStatus = data?.job?.status;
+          if (jobStatus === 'completed' || jobStatus === 'failed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            setJobData(data);
+            setStatus(jobStatus);
+            if (data.job.pagesScraped) {
+              setStats(prev => ({ ...prev, pagesScraped: data.job.pagesScraped, totalFound: data.job.totalLinksFound, percentage: 100 }));
+            }
+            setLoading(false);
+          }
+        } catch {}
+      }, 4000);
+    };
 
     es.onmessage = (event) => {
       try {
@@ -72,10 +96,12 @@ export function useScrapeJob() {
         }
 
         if (data.type === 'completed') {
+          clearInterval(pollInterval);
           setStatus('completed');
           es.close();
           fetchJobResults(id);
         } else if (data.type === 'failed') {
+          clearInterval(pollInterval);
           setStatus('failed');
           setError(data.message || 'Scrape job failed');
           es.close();
@@ -86,10 +112,16 @@ export function useScrapeJob() {
     };
 
     es.onerror = () => {
-      fetchJobResults(id);
+      // SSE failed (common on Vercel where each request is a separate function).
+      // Fall back to polling until the job finishes.
       es.close();
+      startPolling();
     };
-  }, [fetchJobResults]);
+
+    // Safety: also cleanup poll on component unmount
+    const cleanup = () => { clearInterval(pollInterval); };
+    return cleanup;
+  }, [fetchJobResults, authHeaders]);
 
   const startScrape = useCallback(async (url, options = {}) => {
     setError(null);

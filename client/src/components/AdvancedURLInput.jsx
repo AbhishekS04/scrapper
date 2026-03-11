@@ -21,12 +21,12 @@ export default function AdvancedURLInput({ onSubmit, loading }) {
     e.preventDefault();
     if (!url.trim()) return;
     onSubmit(protocol + url.trim(), {
-      deepScan: false, followLinks: false, extractImages: false,
-      extractEmailsOpt: false, extractScripts: false, extractComments: false,
+      deepScan: true, followLinks: true, extractImages: true,
+      extractEmailsOpt: true, extractScripts: false, extractComments: false,
       extractDownloads: false, detectLeaks: false, securityAudit: false,
-      extractHidden: false, extractIframes: false, siteIntel: true,
+      extractHidden: true, extractIframes: true, siteIntel: true,
       brutalMode: true, browserIntel: false, contentAnalysis: true,
-      cmsDetection: false, checkBrokenLinks: false, depth: 1,
+      cmsDetection: false, checkBrokenLinks: false, depth: 2,
       aiPrompt: prompt.trim(),
     });
   };
