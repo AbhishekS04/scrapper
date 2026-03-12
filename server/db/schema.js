@@ -101,3 +101,5 @@ export const scrapeResults = pgTable('scrape_results', {
   cmsInfo: jsonb('cms_info').default({}),
   scrapedAt: timestamp('scraped_at').defaultNow().notNull(),
 });
+
+
