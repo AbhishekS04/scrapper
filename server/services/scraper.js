@@ -262,7 +262,9 @@ async function fetchWithPlaywright(url, timeout = 45000, antiBot = false, storag
 
   let browser;
   try {
-    const { chromium } = await import('playwright');
+    const { chromium } = await import('playwright-extra');
+    const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+    chromium.use(stealthPlugin());
 
     const launchArgs = [
       '--no-sandbox',
@@ -377,6 +379,17 @@ async function smartFetch(url, forcePlaywright = false, antiBot = false, storage
 
   try {
     const result = await fetchWithAxios(url, 30000, antiBot);
+
+    // Check for WAF blocks (Cloudflare, Vercel, Incapsula, etc.)
+    if ([401, 403, 429, 503].includes(result.statusCode)) {
+      console.log(`[Scraper] Encountered WAF block (${result.statusCode}) for ${url}. Switching to stealth browser.`);
+      try {
+        return await fetchWithPlaywright(url, 45000, true, storageState); // Force antiBot mode
+      } catch (err) {
+        console.error(`[Scraper] Stealth fallback failed for ${url}:`, err.message);
+        return result; // Fallback to returning the blocked result
+      }
+    }
 
     // Check if the page needs JS rendering
     if (typeof result.html === 'string' && needsJSRendering(result.html)) {
@@ -618,6 +631,7 @@ export async function startScrapeJob(jobId, url, options = {}) {
       });
 
       try {
+        console.log(`[Scraper] Fetching ${normalizedUrl}...`);
         // Fetch the page with retry
         const result = await withRetry(() => smartFetch(normalizedUrl, false, antiBot, sessionStorageState), 2, requestDelay);
 
@@ -637,7 +651,9 @@ export async function startScrapeJob(jobId, url, options = {}) {
         });
 
         // Extract data
+        console.log(`[Scraper] Extracting data from ${normalizedUrl}...`);
         const pageData = extractPageData(result.html, normalizedUrl, result.headers);
+        console.log(`[Scraper] Extracted ${pageData.rawText?.length || 0} chars of raw text from ${normalizedUrl}.`);
 
         // ─── BRUTAL MODE: Deep intelligence gathering ───
         let brutalReconData = {};
@@ -789,7 +805,9 @@ export async function startScrapeJob(jobId, url, options = {}) {
           contentIntel: Object.keys(contentIntelData).length > 0 ? contentIntelData : {},
           securityAudit: (pagesScraped === 0 && Object.keys(securityAuditData).length > 0) ? securityAuditData : {},
           cmsInfo: (pagesScraped === 0 && Object.keys(cmsInfoData).length > 0) ? cmsInfoData : {},
+          rawText: pageData.rawText,
         });
+        console.log(`[Scraper] Successfully stored result for ${normalizedUrl}`);
 
         pagesScraped++;
 
@@ -839,6 +857,11 @@ export async function startScrapeJob(jobId, url, options = {}) {
           await new Promise(resolve => setTimeout(resolve, randomDelay(requestDelay)));
         }
 
+
+
+
+        
+
       } catch (error) {
         sendProgress(jobId, {
           type: 'error',
@@ -851,7 +874,7 @@ export async function startScrapeJob(jobId, url, options = {}) {
 
     // Run AI extraction if a prompt was provided
     if (aiPrompt) {
-      sendProgress(jobId, { type: 'intel', message: '✨ Running AI Data Extraction with Gemini...' });
+      sendProgress(jobId, { type: 'intel', message: '✨ Running AI Data Extraction with Groq...' });
       // Always save aiPrompt so the AI Data tab is visible in results
       await db.update(scrapeJobs).set({ aiPrompt }).where(eq(scrapeJobs.id, jobId));
       try {
@@ -868,7 +891,8 @@ export async function startScrapeJob(jobId, url, options = {}) {
           return parts.join('\n');
         }).join('\n\n---\n\n');
 
-        console.log(`[AI Extraction] Sending ${combinedText.length} chars to Gemini for job ${jobId}`);
+        console.log(`[AI Extraction] Aggregate Results count: ${results.length}`);
+        console.log(`[AI Extraction] Sending ${combinedText.length} chars to Groq for job ${jobId}`);
         const extractedData = await aiExtractor.extractData(combinedText, aiPrompt);
         
         await db.update(scrapeJobs).set({

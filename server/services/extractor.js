@@ -65,6 +65,7 @@ export function extractPageData(html, pageUrl, headers = {}) {
     microdata: extractMicrodata($),
     linkRelations: extractLinkRelations($, baseUrl),
     responseHeaders: analyzeResponseHeaders(headers),
+    rawText: extractRawText($),
   };
 
   // Generate suggestions based on all extracted data
@@ -74,6 +75,13 @@ export function extractPageData(html, pageUrl, headers = {}) {
   data.seoScore = calculateSEOScore($, data);
 
   return data;
+}
+
+function extractRawText($) {
+  const $clone = $.root().clone();
+  $clone.find('script, style, noscript, svg, code, pre, iframe, nav, footer, header').remove();
+  let text = $clone.find('body').text() || $clone.text();
+  return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function extractTitle($) {

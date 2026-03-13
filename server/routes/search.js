@@ -19,7 +19,7 @@ searchRoutes.post('/search/:jobId', async (req, res) => {
     }
 
     if (!isConfigured) {
-      return res.status(503).json({ error: 'Semantic search requires GEMINI_API_KEY to be configured.' });
+      return res.status(503).json({ error: 'Semantic search is currently disabled (Groq does not support public embeddings).' });
     }
 
     // Fetch the job
@@ -57,7 +57,7 @@ searchRoutes.post('/search/:jobId/index', async (req, res) => {
     const { jobId } = req.params;
 
     if (!isConfigured) {
-      return res.status(503).json({ error: 'Semantic indexing requires GEMINI_API_KEY.' });
+      return res.status(503).json({ error: 'Semantic indexing is currently disabled (Groq does not support public embeddings).' });
     }
 
     const results = await db.select().from(scrapeResults).where(eq(scrapeResults.jobId, jobId));

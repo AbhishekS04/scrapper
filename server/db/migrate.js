@@ -143,11 +143,19 @@ async function migrate() {
       { name: 'cms_info', defaultVal: '{}' },
     ];
     for (const col of advancedCols) {
+      console.log(`Checking column: ${col.name}`);
       const rows = await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name=${col.name}`;
       if (rows.length === 0) {
-        // Use raw SQL string for DDL (column names can't be parameterized)
+        console.log(`Adding column: ${col.name}`);
         await sql(`ALTER TABLE scrape_results ADD COLUMN "${col.name}" JSONB DEFAULT '${col.defaultVal}'`);
       }
+    }
+
+    console.log('Checking raw_text column...');
+    const rawTextRows = await sql`SELECT 1 FROM information_schema.columns WHERE table_name='scrape_results' AND column_name='raw_text'`;
+    if (rawTextRows.length === 0) {
+      console.log('Adding raw_text column...');
+      await sql`ALTER TABLE scrape_results ADD COLUMN raw_text TEXT;`;
     }
 
     console.log('✅ Database migration completed successfully!');
@@ -157,4 +165,10 @@ async function migrate() {
   }
 }
 
-migrate();
+migrate().then(() => {
+  console.log('🏁 Migration process finished.');
+  process.exit(0);
+}).catch(err => {
+  console.error('💥 Migration process failed:', err);
+  process.exit(1);
+});

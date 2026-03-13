@@ -1,7 +1,7 @@
 /**
  * Semantic Search Service
- * Uses Google's text-embedding REST API to embed scraped page content
- * and answer natural language queries by finding the most semantically similar pages.
+ * Uses xAI's embedding API to embed scraped page content
+ * and answer natural language queries.
  */
 import dotenv from 'dotenv';
 import path from 'path';
@@ -11,34 +11,40 @@ import axios from 'axios';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const EMBED_MODEL = 'embedding-001'; // Available on v1beta REST endpoint
-const API_KEY = process.env.GEMINI_API_KEY;
+const EMBED_MODEL = null; // Groq does not currently support embeddings
+const API_KEY = null;
 
 /**
- * Generate a text embedding vector via the Gemini REST API directly.
+ * Generate a text embedding vector via the Grok REST API directly.
  * @param {string} text
- * @returns {Promise<number[]>} A 768-dimensional embedding vector
+ * @returns {Promise<number[]>}
  */
 export async function generateEmbedding(text) {
-  if (!API_KEY) throw new Error('GEMINI_API_KEY is not configured.');
+  if (!API_KEY) throw new Error('Semantic search is currently disabled (Groq does not support public embeddings).');
 
   const cleanText = text.replace(/\s+/g, ' ').trim().substring(0, 8000);
 
   try {
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${API_KEY}`,
+      'https://api.x.ai/v1/embeddings',
       {
-        content: { parts: [{ text: cleanText }] },
+        input: cleanText,
+        model: 'grok-beta', // Replace with specific embedding model if Grok has one, or use grok-beta if it supports it
       },
-      { timeout: 20000 }
+      { 
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 20000 
+      }
     );
-    return response.data.embedding.values;
+    return response.data.data[0].embedding;
   } catch (err) {
-    // Re-throw with the full API error body so we can diagnose
     const apiErr = err.response?.data;
     const status = err.response?.status;
     if (apiErr) {
-      throw new Error(`Gemini Embedding API ${status}: ${JSON.stringify(apiErr)}`);
+      throw new Error(`Embedding API ${status}: ${JSON.stringify(apiErr)}`);
     }
     throw err;
   }
@@ -46,7 +52,6 @@ export async function generateEmbedding(text) {
 
 /**
  * Compute cosine similarity between two embedding vectors.
- * @returns {number} Score between -1 and 1 (1 = identical)
  */
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
@@ -62,9 +67,6 @@ function cosineSimilarity(a, b) {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-/**
- * Build a text corpus from a scraped result row for embedding.
- */
 function buildTextCorpus(result) {
   const parts = [];
   if (result.title) parts.push(result.title);
@@ -82,23 +84,11 @@ function buildTextCorpus(result) {
   return parts.join(' ').substring(0, 8000);
 }
 
-/**
- * Run a semantic search over an array of scraped results.
- * Ranks pages by similarity to the user's query.
- *
- * @param {string} query - The user's natural language question
- * @param {Array} results - Array of scrapeResult rows
- * @param {object[]} embeddings - Pre-computed embeddings [{resultId, vector}]
- * @param {number} topK - How many results to return
- * @returns {Promise<Array>} Ranked results with similarity scores
- */
 export async function semanticSearch(query, results, embeddings, topK = 5) {
-  if (!API_KEY) throw new Error('GEMINI_API_KEY is not configured. Semantic search requires Gemini.');
+  if (!API_KEY) throw new Error('Semantic search is currently disabled (Groq does not support public embeddings).');
 
-  // Generate query embedding
   const queryVector = await generateEmbedding(query);
 
-  // Build a lookup of embeddings by result id / pageUrl
   const embeddingMap = {};
   if (embeddings && Array.isArray(embeddings)) {
     for (const e of embeddings) {
@@ -106,7 +96,6 @@ export async function semanticSearch(query, results, embeddings, topK = 5) {
     }
   }
 
-  // Score each result against the query
   const scored = results.map(r => {
     const vec = embeddingMap[r.id];
     const score = vec ? cosineSimilarity(queryVector, vec) : 0;
@@ -116,26 +105,16 @@ export async function semanticSearch(query, results, embeddings, topK = 5) {
       title: r.title,
       metaDescription: r.metaDescription || r.meta_description,
       score,
-      // Include a snippet of relevant text
       snippet: (Array.isArray(r.paragraphs) ? r.paragraphs.slice(0, 3).join(' ') : '').substring(0, 300),
     };
   });
 
-  // Sort by similarity descending and return topK
   return scored
     .filter(r => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }
 
-/**
- * Generate and index embeddings for all results in a job.
- * Returns an array of { resultId, vector } objects.
- *
- * @param {Array} results - Array of scrapeResult rows
- * @param {function} onProgress - Progress callback
- * @returns {Promise<Array>}
- */
 export async function generateJobEmbeddings(results, onProgress = () => {}) {
   const embeddings = [];
   for (let i = 0; i < results.length; i++) {
@@ -146,7 +125,6 @@ export async function generateJobEmbeddings(results, onProgress = () => {}) {
       if (!text.trim()) continue;
       const vector = await generateEmbedding(text);
       embeddings.push({ resultId: r.id, vector });
-      // Small delay to respect rate limits
       if (i < results.length - 1) await new Promise(res => setTimeout(res, 200));
     } catch (err) {
       console.error(`Failed to embed result ${r.id}:`, err.message);
@@ -156,4 +134,5 @@ export async function generateJobEmbeddings(results, onProgress = () => {}) {
   return embeddings;
 }
 
-export const isConfigured = !!process.env.GEMINI_API_KEY;
+export const isConfigured = false;
+

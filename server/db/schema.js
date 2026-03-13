@@ -99,6 +99,7 @@ export const scrapeResults = pgTable('scrape_results', {
   contentIntel: jsonb('content_intel').default({}),
   securityAudit: jsonb('security_audit').default({}),
   cmsInfo: jsonb('cms_info').default({}),
+  rawText: text('raw_text'),
   scrapedAt: timestamp('scraped_at').defaultNow().notNull(),
 });
 
